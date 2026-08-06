@@ -85,6 +85,28 @@ def rectify(frame: np.ndarray, quad: np.ndarray) -> np.ndarray:
     return cv2.warpPerspective(frame, m, (CARD_W, CARD_H))
 
 
+def rectify_candidates(frame: np.ndarray, quad: np.ndarray) -> list[np.ndarray]:
+    """Aspect-aware rectify: portrait quads warp straight to the canonical
+    view; landscape quads (card at ~90°) warp to a landscape canvas first,
+    then rotate both ways — warping landscape content into the portrait
+    canvas squashes it ~1.38x and no amount of hash orientation recovers
+    that (measured 2026-08-07: 0/15 squashed vs 15/15 with this path)."""
+    w = np.linalg.norm(quad[1] - quad[0])
+    h = np.linalg.norm(quad[3] - quad[0])
+    if h >= w:
+        return [rectify(frame, quad)]
+    dst = np.array(
+        [[0, 0], [CARD_H - 1, 0], [CARD_H - 1, CARD_W - 1], [0, CARD_W - 1]],
+        dtype=np.float32,
+    )
+    m = cv2.getPerspectiveTransform(quad, dst)
+    land = cv2.warpPerspective(frame, m, (CARD_H, CARD_W))
+    return [
+        cv2.rotate(land, cv2.ROTATE_90_CLOCKWISE),
+        cv2.rotate(land, cv2.ROTATE_90_COUNTERCLOCKWISE),
+    ]
+
+
 class CardMatcher:
     def __init__(self, db_path: Path = DB_PATH):
         self.db: list[dict] = []
@@ -104,25 +126,31 @@ class CardMatcher:
         if quad is None:
             return Identification(kind="none", explanation={"reason": "no card-shaped contour"})
 
-        warped = rectify(frame, quad)
-        pil = Image.fromarray(cv2.cvtColor(warped, cv2.COLOR_BGR2RGB))
-        ph, dh = imagehash.phash(pil), imagehash.dhash(pil)
+        candidates = rectify_candidates(frame, quad)
 
         if not self.db:
             return Identification(
                 kind="card",
                 label="card DB not built — run scripts/build_card_db.py",
                 is_stub=True,
-                explanation={"quad": quad.tolist(), "rectified": warped},
+                explanation={"quad": quad.tolist(), "rectified": candidates[0]},
             )
 
-        dists = np.array(
-            [
-                min(ph - p for p in e["phash"]) + min(dh - d for d in e["dhash"])
-                for e in self.db
-            ],
-            dtype=np.float64,
-        )
+        # Hash every rectification candidate; the true orientation scores
+        # far lower than a squashed/mis-rotated one, so min wins.
+        warped, dists = None, None
+        for cand in candidates:
+            pil = Image.fromarray(cv2.cvtColor(cand, cv2.COLOR_BGR2RGB))
+            ph, dh = imagehash.phash(pil), imagehash.dhash(pil)
+            d = np.array(
+                [
+                    min(ph - p for p in e["phash"]) + min(dh - d_ for d_ in e["dhash"])
+                    for e in self.db
+                ],
+                dtype=np.float64,
+            )
+            if dists is None or d.min() < dists.min():
+                warped, dists = cand, d
         order = np.argsort(dists)
         best, second = int(order[0]), int(order[1])
         margin = float(dists[second] - dists[best])
@@ -147,5 +175,10 @@ class CardMatcher:
                 "mean_distance": round(mean, 1),
                 "sigma": round(sigma, 2),
                 "criterion": f"match iff distance <= {MAX_BEST_DISTANCE} and margin >= {MIN_MARGIN}",
+                # top-5 shortlist for the lock-on verify stage (verify.py)
+                "shortlist": [
+                    {"id": self.db[int(i)]["id"], "distance": int(dists[int(i)])}
+                    for i in order[:5]
+                ],
             },
         )

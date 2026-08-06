@@ -52,6 +52,15 @@ def draw(frame: np.ndarray, ident: Identification | None, mode: str) -> np.ndarr
             (10, h - 40), FONT, 0.45, (180, 220, 180), 1, cv2.LINE_AA,
         )
 
+    if ex.get("locked"):
+        text = (
+            f"LOCKED + VERIFIED: {ex['verified_inliers']} matched points"
+            f" (runner-up {ex['verified_second']})"
+            if ex.get("verified")
+            else f"LOCKED ({ex.get('verify_note', 'unverified')})"
+        )
+        cv2.putText(frame, text, (10, h - 66), FONT, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+
     label = ident.label if ident.label else "…"
     cv2.putText(frame, f"{label}   confidence {ident.confidence:.2f}",
                 (10, h - 14), FONT, 0.7, (0, 255, 255), 2, cv2.LINE_AA)

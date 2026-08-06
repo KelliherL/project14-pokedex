@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.dex import Dex
 from app.recognisers.card_matcher import CardMatcher
 from app.recognisers.figurine_stub import FigurineClassifierStub
+from app.recognisers.verify import CardVerifier
 
 IMG_DIR = Path(__file__).resolve().parents[1] / "data" / "cards" / "images"
 
@@ -64,6 +65,38 @@ def main() -> int:
             print(f"      speak: {dex.line_for(ident)}")
         else:
             failures += 1
+
+    # 90° presentation — aspect-aware rectify must recover it
+    path90 = picks[0]
+    ident90 = matcher.identify(synth_frame(Image.open(path90), 90))
+    ok90 = ident90.explanation.get("best_card") == path90.stem and ident90.label is not None
+    print(f"{'PASS' if ok90 else 'FAIL'}: {path90.stem} @ 90deg -> {ident90.label!r}")
+    failures += 0 if ok90 else 1
+
+    # verify stage — correct card accepted with clear inliers
+    verifier = CardVerifier()
+    identv = matcher.identify(synth_frame(Image.open(picks[1]), 5))
+    res = verifier.verify(
+        identv.explanation["rectified"],
+        [s["id"] for s in identv.explanation["shortlist"]],
+    )
+    okv = res.available and res.accepted and res.best_id == picks[1].stem
+    print(
+        f"{'PASS' if okv else 'FAIL'}: verify {picks[1].stem} -> "
+        f"{res.best_id!r} ({res.inliers} inliers vs {res.second_inliers})"
+    )
+    failures += 0 if okv else 1
+
+    # verify stage — featureless junk must be rejected
+    junk = matcher.identify(synth_frame(Image.new("RGB", (245, 337), (235, 235, 235)), 0))
+    if junk.kind == "card" and "shortlist" in junk.explanation:
+        resj = verifier.verify(
+            junk.explanation["rectified"],
+            [s["id"] for s in junk.explanation["shortlist"]],
+        )
+        okj = not resj.accepted
+        print(f"{'PASS' if okj else 'FAIL'}: junk card rejected by verify (inliers={resj.inliers})")
+        failures += 0 if okj else 1
 
     stub = FigurineClassifierStub().identify(np.zeros((720, 1280, 3), np.uint8))
     print(f"PASS: figurine stub -> {stub.label} (is_stub={stub.is_stub})")

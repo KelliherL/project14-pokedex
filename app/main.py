@@ -18,9 +18,45 @@ import cv2
 
 from app import overlay
 from app.dex import Dex
+from app.recognisers.base import Identification
 from app.recognisers.card_matcher import CardMatcher
 from app.recognisers.figurine_stub import FigurineClassifierStub
+from app.recognisers.verify import CardVerifier
+from app.recognisers.voting import VoteBuffer
 from app.tts import speak
+
+UNLOCK_AFTER_EMPTY_FRAMES = 10
+
+
+def lock_from(ident: Identification, matcher: CardMatcher, verifier: CardVerifier,
+              winner: str) -> Identification | None:
+    """Vote converged on `winner`: geometrically verify it against the
+    frame's shortlist. Returns the locked Identification, or None (abstain)."""
+    shortlist = [s["id"] for s in ident.explanation.get("shortlist", [])]
+    if winner not in shortlist:
+        shortlist.insert(0, winner)
+    result = verifier.verify(ident.explanation["rectified"], shortlist)
+    if result.available and not (result.accepted and result.best_id == winner):
+        return None
+    entry = next((e for e in matcher.db if e["id"] == winner), None)
+    if entry is None:
+        return None
+    explanation = {
+        **ident.explanation,
+        "locked": True,
+        "verified": result.available,
+        "verified_inliers": result.inliers,
+        "verified_second": result.second_inliers,
+    }
+    if not result.available:
+        explanation["verify_note"] = "verify skipped — reference images not cached"
+    return Identification(
+        kind="card",
+        label=entry["name"],
+        dex_id=(entry.get("dex_ids") or [None])[0],
+        confidence=max(0.0, 1.0 - ident.explanation["best_distance"] / 32.0),
+        explanation=explanation,
+    )
 
 
 def main() -> int:
@@ -43,6 +79,11 @@ def main() -> int:
         print(f"error: cannot open camera {args.camera} (try --camera 1)")
         return 1
 
+    verifier = CardVerifier()
+    votes = VoteBuffer()
+    locked: Identification | None = None
+    empty_streak = 0
+
     mode = args.mode
     while True:
         ok, frame = cap.read()
@@ -50,7 +91,25 @@ def main() -> int:
             print("error: camera read failed")
             break
         ident = recognisers[mode].identify(frame)
-        frame = overlay.draw(frame, ident, mode)
+
+        # Card mode runs the full lane: hash per frame -> vote -> verify once.
+        if mode == "card" and recognisers["card"].db:
+            if ident.kind == "none":
+                empty_streak += 1
+                if empty_streak >= UNLOCK_AFTER_EMPTY_FRAMES:
+                    votes.reset()
+                    locked = None
+            else:
+                empty_streak = 0
+                if locked is None:
+                    winner = votes.add(ident.explanation.get("best_card"))
+                    if winner:
+                        locked = lock_from(ident, recognisers["card"], verifier, winner)
+                        if locked is None:
+                            votes.reset()  # verify abstained; keep watching
+
+        shown = locked if (mode == "card" and locked is not None) else ident
+        frame = overlay.draw(frame, shown, mode)
         cv2.imshow("Pokedex dev harness — COMPX374 P14", frame)
 
         key = cv2.waitKey(1) & 0xFF
@@ -58,8 +117,10 @@ def main() -> int:
             break
         elif key == ord("m"):
             mode = "figurine" if mode == "card" else "card"
+            votes.reset()
+            locked = None
         elif key == ord(" "):
-            speak(dex.line_for(ident), mute=args.mute)
+            speak(dex.line_for(shown), mute=args.mute)
 
     cap.release()
     cv2.destroyAllWindows()
