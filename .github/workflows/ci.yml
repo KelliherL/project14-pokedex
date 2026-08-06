@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      # opencv-python (not -headless) needs libGL even for import
+      - run: sudo apt-get update && sudo apt-get install -y libgl1 libglib2.0-0
+
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - run: ruff check .
+
+      - run: pytest
+
+      # The end-to-end selftest composites real reference card images into
+      # synthetic scenes, so it needs the local TCGdex cache. Card images are
+      # deliberately not committed (see .gitignore); cache the download so we
+      # only hit TCGdex on a cold cache.
+      - name: Restore card-image cache (TCGdex base1)
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/cards/images
+            data/cards/meta
+            data/cards/set.json
+            data/cards/ids.txt
+            data/cards/urls.txt
+          key: tcgdex-base1-v1
+
+      - name: Download card set on cold cache
+        run: |
+          count=$(ls data/cards/images 2>/dev/null | wc -l)
+          if [ "$count" -lt 100 ]; then
+            bash scripts/download_card_set.sh
+          else
+            echo "cache hit: $count images"
+          fi
+
+      - name: Headless end-to-end selftest
+        run: python scripts/selftest.py
