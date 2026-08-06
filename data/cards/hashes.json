@@ -1,0 +1,1470 @@
+{
+ "set": "base1",
+ "source": "TCGdex low.webp (245x337)",
+ "cards": [
+  {
+   "id": "base1-1",
+   "name": "Alakazam",
+   "dex_ids": [
+    65
+   ],
+   "phash": [
+    "aa6ec0e1c39399cd",
+    "bfc4905b96398867"
+   ],
+   "dhash": [
+    "0b33716969194d51",
+    "754d67696971332f"
+   ]
+  },
+  {
+   "id": "base1-10",
+   "name": "Mewtwo",
+   "dex_ids": [
+    150
+   ],
+   "phash": [
+    "aa6ec4c583b391c7",
+    "ffc4904f9619c46c"
+   ],
+   "dhash": [
+    "63333139611b4d51",
+    "714d273963733339"
+   ]
+  },
+  {
+   "id": "base1-100",
+   "name": "Lightning Energy",
+   "dex_ids": [],
+   "phash": [
+    "b3cd6d324d6132c3",
+    "e667389818cb6769"
+   ],
+   "dhash": [
+    "5656d0f0c88ccce2",
+    "b08cce4cf0f49595"
+   ]
+  },
+  {
+   "id": "base1-101",
+   "name": "Psychic Energy",
+   "dex_ids": [],
+   "phash": [
+    "93dee4335ae530c2",
+    "c674b1990f4f6568"
+   ],
+   "dhash": [
+    "1775d57159dcceb3",
+    "328cc46571545107"
+   ]
+  },
+  {
+   "id": "base1-102",
+   "name": "Water Energy",
+   "dex_ids": [],
+   "phash": [
+    "b3cce4334ae538c6",
+    "e664b1990b4f6c6c"
+   ],
+   "dhash": [
+    "1751517159dccef3",
+    "308cc46571755505"
+   ]
+  },
+  {
+   "id": "base1-11",
+   "name": "Nidoking",
+   "dex_ids": [
+    34
+   ],
+   "phash": [
+    "ef7ac1a591978582",
+    "bad0950fc43dd06d"
+   ],
+   "dhash": [
+    "1921717163674541",
+    "754d113971717b67"
+   ]
+  },
+  {
+   "id": "base1-12",
+   "name": "Ninetales",
+   "dex_ids": [
+    38
+   ],
+   "phash": [
+    "cb4bb0b434cfc1c3",
+    "9ee1e51a6127946b"
+   ],
+   "dhash": [
+    "39696363311d4d51",
+    "7549477339396963"
+   ]
+  },
+  {
+   "id": "base1-13",
+   "name": "Poliwrath",
+   "dex_ids": [
+    62
+   ],
+   "phash": [
+    "fa7bc094e53581c6",
+    "aed1953eb08f942c"
+   ],
+   "dhash": [
+    "1969492b69716d61",
+    "794971692b696967"
+   ]
+  },
+  {
+   "id": "base1-14",
+   "name": "Raichu",
+   "dex_ids": [
+    26
+   ],
+   "phash": [
+    "bf6a9090c3c78d9c",
+    "eac0c53ab66dc836"
+   ],
+   "dhash": [
+    "113133636b324d79",
+    "614d932939337377"
+   ]
+  },
+  {
+   "id": "base1-15",
+   "name": "Venusaur",
+   "dex_ids": [
+    3
+   ],
+   "phash": [
+    "ae7ad1b1b087c1c3",
+    "fbd0841be56d9069"
+   ],
+   "dhash": [
+    "1971616527434d43",
+    "394d1d1b59795167"
+   ]
+  },
+  {
+   "id": "base1-16",
+   "name": "Zapdos",
+   "dex_ids": [
+    145
+   ],
+   "phash": [
+    "be6e9595e06989c2",
+    "ebc4803fb1c3dc68"
+   ],
+   "dhash": [
+    "636d7133315c4d69",
+    "694dc57333714931"
+   ]
+  },
+  {
+   "id": "base1-17",
+   "name": "Beedrill",
+   "dex_ids": [
+    15
+   ],
+   "phash": [
+    "bf3ae0e0c993c1c3",
+    "ea90b54b9c1d9669"
+   ],
+   "dhash": [
+    "1529693973776d43",
+    "3d09113121696b57"
+   ]
+  },
+  {
+   "id": "base1-18",
+   "name": "Dragonair",
+   "dex_ids": [
+    148
+   ],
+   "phash": [
+    "ba7bc18584b4b5c6",
+    "efd1942f911ee02c"
+   ],
+   "dhash": [
+    "5b090d05693a6d65",
+    "5949a3695f4f6f25"
+   ]
+  },
+  {
+   "id": "base1-19",
+   "name": "Dugtrio",
+   "dex_ids": [
+    51
+   ],
+   "phash": [
+    "ab62d4904a6bd9f4",
+    "eecc813a1fc18c5e"
+   ],
+   "dhash": [
+    "51cc0f7b695a4f71",
+    "710da569210fcc75"
+   ]
+  },
+  {
+   "id": "base1-2",
+   "name": "Blastoise",
+   "dex_ids": [
+    9
+   ],
+   "phash": [
+    "ee6ae1b1b09c81c7",
+    "bbc0b41be536d06c"
+   ],
+   "dhash": [
+    "1961613169716561",
+    "7959616973797963"
+   ]
+  },
+  {
+   "id": "base1-20",
+   "name": "Electabuzz",
+   "dex_ids": [
+    125
+   ],
+   "phash": [
+    "fa7a859507b6f0c0",
+    "afd0d02f521ce56a"
+   ],
+   "dhash": [
+    "7331312969be0d71",
+    "714f82696b737331"
+   ]
+  },
+  {
+   "id": "base1-21",
+   "name": "Electrode",
+   "dex_ids": [
+    101
+   ],
+   "phash": [
+    "af6e91913136e4c6",
+    "fac4843b649db16c"
+   ],
+   "dhash": [
+    "5b73654d733b5d71",
+    "614523214d593125"
+   ]
+  },
+  {
+   "id": "base1-22",
+   "name": "Pidgeotto",
+   "dex_ids": [
+    17
+   ],
+   "phash": [
+    "a3f191981aceccec",
+    "f65bc4324f649946"
+   ],
+   "dhash": [
+    "59da8649333a4f61",
+    "490da3316d9ea465"
+   ]
+  },
+  {
+   "id": "base1-23",
+   "name": "Arcanine",
+   "dex_ids": [
+    59
+   ],
+   "phash": [
+    "be2ec1d16826c5c7",
+    "eb849c7b2d8c906d"
+   ],
+   "dhash": [
+    "19696d6d6b194d71",
+    "714d672949496967"
+   ]
+  },
+  {
+   "id": "base1-24",
+   "name": "Charmeleon",
+   "dex_ids": [
+    5
+   ],
+   "phash": [
+    "eb5bc0945c38e5a5",
+    "bef1953e0992b00f"
+   ],
+   "dhash": [
+    "c949737165d84d71",
+    "714de45971316d6c"
+   ]
+  },
+  {
+   "id": "base1-25",
+   "name": "Dewgong",
+   "dex_ids": [
+    87
+   ],
+   "phash": [
+    "bb39e1c24a1e86e6",
+    "ee93b4680fb4d30c"
+   ],
+   "dhash": [
+    "11962b7161596961",
+    "79496571712b9677"
+   ]
+  },
+  {
+   "id": "base1-26",
+   "name": "Dratini",
+   "dex_ids": [
+    147
+   ],
+   "phash": [
+    "af3f90c149cd9196",
+    "fa95c16b1c67c03c"
+   ],
+   "dhash": [
+    "713971736bc84d69",
+    "6948ec2931716171"
+   ]
+  },
+  {
+   "id": "base1-27",
+   "name": "Farfetch'd",
+   "dex_ids": [
+    83
+   ],
+   "phash": [
+    "be3e918149e49d96",
+    "eb94c06b1c4fc83d"
+   ],
+   "dhash": [
+    "796d6d45331b4d61",
+    "794d27315d494961"
+   ]
+  },
+  {
+   "id": "base1-28",
+   "name": "Growlithe",
+   "dex_ids": [
+    58
+   ],
+   "phash": [
+    "8e9e8191494edee6",
+    "db34d43b1ce48b4c"
+   ],
+   "dhash": [
+    "71cc65335bcc4d71",
+    "714dcc213359cc71"
+   ]
+  },
+  {
+   "id": "base1-29",
+   "name": "Haunter",
+   "dex_ids": [
+    93
+   ],
+   "phash": [
+    "ba7bc1c484b299cd",
+    "efc1946ec118cc67"
+   ],
+   "dhash": [
+    "1313733d611b4d61",
+    "794d275143313737"
+   ]
+  },
+  {
+   "id": "base1-3",
+   "name": "Chansey",
+   "dex_ids": [
+    113
+   ],
+   "phash": [
+    "9f4fb4b060c3d386",
+    "cae5e11a317d866c"
+   ],
+   "dhash": [
+    "71716969333b4d61",
+    "794d233169697171"
+   ]
+  },
+  {
+   "id": "base1-30",
+   "name": "Ivysaur",
+   "dex_ids": [
+    2
+   ],
+   "phash": [
+    "eb7ad084bd978486",
+    "bed1853ee81d912c"
+   ],
+   "dhash": [
+    "1111697363474543",
+    "3d5d1c3121697767"
+   ]
+  },
+  {
+   "id": "base1-31",
+   "name": "Jynx",
+   "dex_ids": [
+    124
+   ],
+   "phash": [
+    "8f4fc1f105a6d3c2",
+    "dbe5945b500d9768"
+   ],
+   "dhash": [
+    "53336971711b4d71",
+    "714d277171693335"
+   ]
+  },
+  {
+   "id": "base1-32",
+   "name": "Kadabra",
+   "dex_ids": [
+    64
+   ],
+   "phash": [
+    "ba7ae1e504989dc5",
+    "efd0b04f5130c86f"
+   ],
+   "dhash": [
+    "13497139631b4d71",
+    "714c272963716d37"
+   ]
+  },
+  {
+   "id": "base1-33",
+   "name": "Kakuna",
+   "dex_ids": [
+    14
+   ],
+   "phash": [
+    "ee7ad181c1b28787",
+    "bbd0843b945dd22d"
+   ],
+   "dhash": [
+    "1131693133676543",
+    "3d59193373697377"
+   ]
+  },
+  {
+   "id": "base1-34",
+   "name": "Machoke",
+   "dex_ids": [
+    67
+   ],
+   "phash": [
+    "ba3ac1850d3b9dc6",
+    "efd0942f1895ca6c"
+   ],
+   "dhash": [
+    "d80d713969184d71",
+    "714de66163714fe4"
+   ]
+  },
+  {
+   "id": "base1-35",
+   "name": "Magikarp",
+   "dex_ids": [
+    129
+   ],
+   "phash": [
+    "cee3491d9cb4a1c6",
+    "9b411cb6c91ef46c"
+   ],
+   "dhash": [
+    "61414d2e61696d61",
+    "794969790b4d7d71"
+   ]
+  },
+  {
+   "id": "base1-36",
+   "name": "Magmar",
+   "dex_ids": [
+    126
+   ],
+   "phash": [
+    "be2ec5819192d3c7",
+    "ebc4916bc439866d"
+   ],
+   "dhash": [
+    "613371314fd94d51",
+    "714d640d73713379"
+   ]
+  },
+  {
+   "id": "base1-37",
+   "name": "Nidorino",
+   "dex_ids": [
+    33
+   ],
+   "phash": [
+    "ae7ac481f0b39999",
+    "fbd4902fa4598c33"
+   ],
+   "dhash": [
+    "3165710d6b674563",
+    "394d19094f715973"
+   ]
+  },
+  {
+   "id": "base1-38",
+   "name": "Poliwhirl",
+   "dex_ids": [
+    61
+   ],
+   "phash": [
+    "e2e11b1f8cf428ce",
+    "b44b4eb5c91e2d64"
+   ],
+   "dhash": [
+    "59de879663796d61",
+    "79496139961e8465"
+   ]
+  },
+  {
+   "id": "base1-39",
+   "name": "Porygon",
+   "dex_ids": [
+    137
+   ],
+   "phash": [
+    "af6b9b99c0b4380e",
+    "fac5ca33901e69b4"
+   ],
+   "dhash": [
+    "60732f0f333b6f61",
+    "690923310e0b31f1"
+   ]
+  },
+  {
+   "id": "base1-4",
+   "name": "Charizard",
+   "dex_ids": [
+    6
+   ],
+   "phash": [
+    "ba3ac4c5d093d9c5",
+    "ef90916e8539846f"
+   ],
+   "dhash": [
+    "1935393977194d61",
+    "794d271161635367"
+   ]
+  },
+  {
+   "id": "base1-40",
+   "name": "Raticate",
+   "dex_ids": [
+    20
+   ],
+   "phash": [
+    "ab68969343a5dcc6",
+    "fec2cb39064f8964"
+   ],
+   "dhash": [
+    "594d3757691b4f6d",
+    "4909236915134d65"
+   ]
+  },
+  {
+   "id": "base1-41",
+   "name": "Seel",
+   "dex_ids": [
+    86
+   ],
+   "phash": [
+    "9f9dc0c2627f898c",
+    "ca37946833d5dc26"
+   ],
+   "dhash": [
+    "6171736965596d61",
+    "7149655969317179"
+   ]
+  },
+  {
+   "id": "base1-42",
+   "name": "Wartortle",
+   "dex_ids": [
+    8
+   ],
+   "phash": [
+    "be3d4b5ae0d48187",
+    "eb951ef0b54ac42c"
+   ],
+   "dhash": [
+    "996b4e9635796d61",
+    "79496153968d2966"
+   ]
+  },
+  {
+   "id": "base1-43",
+   "name": "Abra",
+   "dex_ids": [
+    63
+   ],
+   "phash": [
+    "eb6ec5900db3e1c4",
+    "bec4903b5a19b46e"
+   ],
+   "dhash": [
+    "43712b69751bcd71",
+    "714c2751692b713d"
+   ]
+  },
+  {
+   "id": "base1-44",
+   "name": "Bulbasaur",
+   "dex_ids": [
+    1
+   ],
+   "phash": [
+    "ae1e55854af271c3",
+    "fbb4122f1f582469"
+   ],
+   "dhash": [
+    "71735d2163766743",
+    "3d1911397b453171"
+   ]
+  },
+  {
+   "id": "base1-45",
+   "name": "Caterpie",
+   "dex_ids": [
+    10
+   ],
+   "phash": [
+    "ae32d1c949ef4d82",
+    "fb98c6631e65182d"
+   ],
+   "dhash": [
+    "610d0d2763524743",
+    "351d31391b4f4f79"
+   ]
+  },
+  {
+   "id": "base1-46",
+   "name": "Charmander",
+   "dex_ids": [
+    4
+   ],
+   "phash": [
+    "9ad1c1b14f0eeca5",
+    "cf79841b1aa4b90f"
+   ],
+   "dhash": [
+    "79dc6961758d6d51",
+    "71494e517969c461"
+   ]
+  },
+  {
+   "id": "base1-47",
+   "name": "Diglett",
+   "dex_ids": [
+    50
+   ],
+   "phash": [
+    "ab2fc595586bd184",
+    "fe8d903f1dc1842e"
+   ],
+   "dhash": [
+    "614d0f1379c84d71",
+    "714dec61370d4d69"
+   ]
+  },
+  {
+   "id": "base1-48",
+   "name": "Doduo",
+   "dex_ids": [
+    84
+   ],
+   "phash": [
+    "af2d17930fc4686a",
+    "fa8742395a6e3dc0"
+   ],
+   "dhash": [
+    "605e1776613bad65",
+    "59482369911785f9"
+   ]
+  },
+  {
+   "id": "base1-49",
+   "name": "Drowzee",
+   "dex_ids": [
+    96
+   ],
+   "phash": [
+    "9a1fc5e162b2d4c5",
+    "cfb5904b3758806f"
+   ],
+   "dhash": [
+    "7373713969194d51",
+    "754d676963713131"
+   ]
+  },
+  {
+   "id": "base1-5",
+   "name": "Clefairy",
+   "dex_ids": [
+    35
+   ],
+   "phash": [
+    "8e4ee5b1319391d6",
+    "dbe4b01b6438c57c"
+   ],
+   "dhash": [
+    "616361616b330d65",
+    "5949232179793969"
+   ]
+  },
+  {
+   "id": "base1-50",
+   "name": "Gastly",
+   "dex_ids": [
+    92
+   ],
+   "phash": [
+    "bf3fc0c1c1e0c9cc",
+    "ea95966b964a9866"
+   ],
+   "dhash": [
+    "630f370f7b1b0d61",
+    "794f27210f130f39"
+   ]
+  },
+  {
+   "id": "base1-51",
+   "name": "Koffing",
+   "dex_ids": [
+    109
+   ],
+   "phash": [
+    "ef5a1b98cdc58582",
+    "baf04f32986fd02c"
+   ],
+   "dhash": [
+    "71294f6763774743",
+    "3d1d1139190d6b71"
+   ]
+  },
+  {
+   "id": "base1-52",
+   "name": "Machop",
+   "dex_ids": [
+    66
+   ],
+   "phash": [
+    "eb62c29c1e91958f",
+    "bec897364b3bc025"
+   ],
+   "dhash": [
+    "41874f1f71984d71",
+    "710dc451070d1e7d"
+   ]
+  },
+  {
+   "id": "base1-53",
+   "name": "Magnemite",
+   "dex_ids": [
+    81
+   ],
+   "phash": [
+    "ee6e919191e7c584",
+    "bbc4c43bc44d986d"
+   ],
+   "dhash": [
+    "7121636331b64d79",
+    "6149927339197b71"
+   ]
+  },
+  {
+   "id": "base1-54",
+   "name": "Metapod",
+   "dex_ids": [
+    11
+   ],
+   "phash": [
+    "ee6ed0919199c5c6",
+    "fbc4953bc433906c"
+   ],
+   "dhash": [
+    "1927637363774543",
+    "391d113931391b67"
+   ]
+  },
+  {
+   "id": "base1-55",
+   "name": "Nidoran\u2642",
+   "dex_ids": [
+    32
+   ],
+   "phash": [
+    "ee7a9585d1d3c086",
+    "bbd0c03f8479972c"
+   ],
+   "dhash": [
+    "7935696963474743",
+    "3d1d1d3169695361"
+   ]
+  },
+  {
+   "id": "base1-56",
+   "name": "Onix",
+   "dex_ids": [
+    95
+   ],
+   "phash": [
+    "ab4fc69494e8d9c2",
+    "fee5933e81428c6c"
+   ],
+   "dhash": [
+    "616353136d1b0f71",
+    "710f274937353979"
+   ]
+  },
+  {
+   "id": "base1-57",
+   "name": "Pidgey",
+   "dex_ids": [
+    16
+   ],
+   "phash": [
+    "be6ae5c11b9e9484",
+    "ebc4b06b4e35c12e"
+   ],
+   "dhash": [
+    "61032d79733a2d69",
+    "694ba331614b3f79"
+   ]
+  },
+  {
+   "id": "base1-58",
+   "name": "Pikachu",
+   "dex_ids": [
+    25
+   ],
+   "phash": [
+    "9f4bc1b494b5c1c3",
+    "cee1b41ec11f9469"
+   ],
+   "dhash": [
+    "7371697979cc4d79",
+    "614d8c6161697131"
+   ]
+  },
+  {
+   "id": "base1-59",
+   "name": "Poliwag",
+   "dex_ids": [
+    60
+   ],
+   "phash": [
+    "eae18c9c94b7298b",
+    "bf49c936c91d6c21"
+   ],
+   "dhash": [
+    "61c14b0f61336d61",
+    "794933790f2d7c79"
+   ]
+  },
+  {
+   "id": "base1-6",
+   "name": "Gyarados",
+   "dex_ids": [
+    130
+   ],
+   "phash": [
+    "ba7a8085e17dc3c6",
+    "eed0952fb487906c"
+   ],
+   "dhash": [
+    "1139693169596d69",
+    "6949656973696367"
+   ]
+  },
+  {
+   "id": "base1-60",
+   "name": "Ponyta",
+   "dex_ids": [
+    77
+   ],
+   "phash": [
+    "ba3ec5c54791d185",
+    "ef94906f503b842f"
+   ],
+   "dhash": [
+    "6135313165dd4d71",
+    "714d445973735379"
+   ]
+  },
+  {
+   "id": "base1-61",
+   "name": "Rattata",
+   "dex_ids": [
+    19
+   ],
+   "phash": [
+    "eb4a85913e369587",
+    "bee0d03f6a9cc02d"
+   ],
+   "dhash": [
+    "71f3437171884f65",
+    "4909ee71713d3071"
+   ]
+  },
+  {
+   "id": "base1-62",
+   "name": "Sandshrew",
+   "dex_ids": [
+    27
+   ],
+   "phash": [
+    "ae4ec39111e9cdc6",
+    "fbe4973a4443986c"
+   ],
+   "dhash": [
+    "716163333d3a0f71",
+    "710fa34333397971"
+   ]
+  },
+  {
+   "id": "base1-63",
+   "name": "Squirtle",
+   "dex_ids": [
+    7
+   ],
+   "phash": [
+    "be868785217b0bce",
+    "eb2cd22f34d05e64"
+   ],
+   "dhash": [
+    "61ec711735396d61",
+    "794963531771c879"
+   ]
+  },
+  {
+   "id": "base1-64",
+   "name": "Starmie",
+   "dex_ids": [
+    121
+   ],
+   "phash": [
+    "ee6b9191983e8d86",
+    "bbc5843bcd94d82c"
+   ],
+   "dhash": [
+    "1943672771396d61",
+    "794963711b193d67"
+   ]
+  },
+  {
+   "id": "base1-65",
+   "name": "Staryu",
+   "dex_ids": [
+    120
+   ],
+   "phash": [
+    "be370ddac8c0c1ce",
+    "ea9d4a719d6a9464"
+   ],
+   "dhash": [
+    "617f470f61696d61",
+    "794969790f1d0169"
+   ]
+  },
+  {
+   "id": "base1-66",
+   "name": "Tangela",
+   "dex_ids": [
+    114
+   ],
+   "phash": [
+    "ae7ac185cd3e91c1",
+    "fbd0942f9894c46b"
+   ],
+   "dhash": [
+    "6165392763674543",
+    "3d5d19391b635969"
+   ]
+  },
+  {
+   "id": "base1-67",
+   "name": "Voltorb",
+   "dex_ids": [
+    100
+   ],
+   "phash": [
+    "bb3b85c4ccc39195",
+    "ee91d02e9568c43f"
+   ],
+   "dhash": [
+    "61731b1933c84d71",
+    "714dcc3367273171"
+   ]
+  },
+  {
+   "id": "base1-68",
+   "name": "Vulpix",
+   "dex_ids": [
+    37
+   ],
+   "phash": [
+    "9e1ec1e169c89597",
+    "cbb4944b3c62c13f"
+   ],
+   "dhash": [
+    "61696d3163984d71",
+    "714de63173496979"
+   ]
+  },
+  {
+   "id": "base1-69",
+   "name": "Weedle",
+   "dex_ids": [
+    13
+   ],
+   "phash": [
+    "cf4f859532f2d0c2",
+    "9ae5d03f67588568"
+   ],
+   "dhash": [
+    "6363656563766763",
+    "3919913949593131"
+   ]
+  },
+  {
+   "id": "base1-7",
+   "name": "Hitmonchan",
+   "dex_ids": [
+    107
+   ],
+   "phash": [
+    "ab6ec59150e3d4c6",
+    "fec4d03b8549c56c"
+   ],
+   "dhash": [
+    "7133232b69594d71",
+    "714d65612b3b3371"
+   ]
+  },
+  {
+   "id": "base1-70",
+   "name": "Clefairy Doll",
+   "dex_ids": [],
+   "phash": [
+    "ec6d91b06e4c9d91",
+    "b9c7c41a3be6c03a"
+   ],
+   "dhash": [
+    "965c367345bab2e4",
+    "d092a25d3193c596"
+   ]
+  },
+  {
+   "id": "base1-71",
+   "name": "Computer Search",
+   "dex_ids": [],
+   "phash": [
+    "bf6b91c06e0dc998",
+    "ead1c46a3ba78c32"
+   ],
+   "dhash": [
+    "961e717361aab6e4",
+    "c082aa7931710796"
+   ]
+  },
+  {
+   "id": "base1-72",
+   "name": "Devolution Spray",
+   "dex_ids": [],
+   "phash": [
+    "fb7aa4c4981b3ac4",
+    "aed1b16e8cb12e4c"
+   ],
+   "dhash": [
+    "9647393971aea2e4",
+    "d0aa8a7163631d96"
+   ]
+  },
+  {
+   "id": "base1-73",
+   "name": "Impostor Professor Oak",
+   "dex_ids": [],
+   "phash": [
+    "917967c43e9163c6",
+    "c4d3326e4d3b3668"
+   ],
+   "dhash": [
+    "9656dc98b8d6d8e4",
+    "d8e094e2e6c48596"
+   ]
+  },
+  {
+   "id": "base1-74",
+   "name": "Item Finder",
+   "dex_ids": [],
+   "phash": [
+    "fe6a91912e6cc8c3",
+    "abc0c43b3bc69c71"
+   ],
+   "dhash": [
+    "9617312575b2b4e4",
+    "c8d0a2415b731796"
+   ]
+  },
+  {
+   "id": "base1-75",
+   "name": "Lass",
+   "dex_ids": [],
+   "phash": [
+    "d06a2da5e9907ec6",
+    "85c0780ffc3a2f6c"
+   ],
+   "dhash": [
+    "9644cd98c8aad8e4",
+    "d8e4aaa8e64c5d96"
+   ]
+  },
+  {
+   "id": "base1-76",
+   "name": "Pok\u00e9mon Breeder",
+   "dex_ids": [],
+   "phash": [
+    "fb6b84a43b3989c4",
+    "aec1d10e6e938c6e"
+   ],
+   "dhash": [
+    "96c6711965b2a2e4",
+    "d09ab25967619c96"
+   ]
+  },
+  {
+   "id": "base1-77",
+   "name": "Pok\u00e9mon Trader",
+   "dex_ids": [],
+   "phash": [
+    "b6724969e6b49a98",
+    "e1d81cc3b31ccf32"
+   ],
+   "dhash": [
+    "960eac8c8cb2a6f4",
+    "d08ab2cececa8596"
+   ]
+  },
+  {
+   "id": "base1-78",
+   "name": "Scoop Up",
+   "dex_ids": [],
+   "phash": [
+    "9f7ac4e5521a69c8",
+    "ead0914f07b0bc67"
+   ],
+   "dhash": [
+    "9616397969b2b2e4",
+    "d8b2b26961639796"
+   ]
+  },
+  {
+   "id": "base1-79",
+   "name": "Super Energy Removal",
+   "dex_ids": [],
+   "phash": [
+    "fe7a81a14e1ecb42",
+    "abd0d40b0bb49ee9"
+   ],
+   "dhash": [
+    "965771716d96a6e4",
+    "d89a964971711596"
+   ]
+  },
+  {
+   "id": "base1-8",
+   "name": "Machamp",
+   "dex_ids": [
+    68
+   ],
+   "phash": [
+    "ab7ac090d485ddc7",
+    "fed0943b812f886d"
+   ],
+   "dhash": [
+    "191971336b1b4d71",
+    "714d272933716567"
+   ]
+  },
+  {
+   "id": "base1-80",
+   "name": "Defender",
+   "dex_ids": [],
+   "phash": [
+    "bf6a84845a3ba764",
+    "eac1d12e0f91f2cc"
+   ],
+   "dhash": [
+    "9657496971b6ba74",
+    "d0a29271696d1596"
+   ]
+  },
+  {
+   "id": "base1-81",
+   "name": "Energy Retrieval",
+   "dex_ids": [],
+   "phash": [
+    "ee6a91916e4c3e13",
+    "bbc0c43b3be46b18"
+   ],
+   "dhash": [
+    "960f252501a2c0e4",
+    "d8b8ba7f5b5b0f96"
+   ]
+  },
+  {
+   "id": "base1-82",
+   "name": "Full Heal",
+   "dex_ids": [],
+   "phash": [
+    "fe3a95c0624a1d9b",
+    "ab95c06a3fe54a31"
+   ],
+   "dhash": [
+    "961f796141bef064",
+    "d9d0827d79610796"
+   ]
+  },
+  {
+   "id": "base1-83",
+   "name": "Maintenance",
+   "dex_ids": [],
+   "phash": [
+    "fe7a81c0e46d3a1a",
+    "abd0c46ab1c76bb0"
+   ],
+   "dhash": [
+    "961d396349b8f8e4",
+    "d8c0e26d19634796"
+   ]
+  },
+  {
+   "id": "base1-84",
+   "name": "PlusPower",
+   "dex_ids": [],
+   "phash": [
+    "ea6a85945a6b6b64",
+    "afc0d03e0bc13ece"
+   ],
+   "dhash": [
+    "9617496921b2a2e4",
+    "d8b2b27b696d1796"
+   ]
+  },
+  {
+   "id": "base1-85",
+   "name": "Pok\u00e9mon Center",
+   "dex_ids": [],
+   "phash": [
+    "fb7b84844e796292",
+    "aed1d02e1bd13e38"
+   ],
+   "dhash": [
+    "964f597171aeb8e4",
+    "d8828a7171650d96"
+   ]
+  },
+  {
+   "id": "base1-86",
+   "name": "Pok\u00e9mon Flute",
+   "dex_ids": [],
+   "phash": [
+    "e3699c946469cb9a",
+    "b6c3c93e31c39e30"
+   ],
+   "dhash": [
+    "965c5387ccea9664",
+    "c194a0cc1e35c596"
+   ]
+  },
+  {
+   "id": "base1-87",
+   "name": "Pok\u00e9dex",
+   "dex_ids": [],
+   "phash": [
+    "da6a85915ac66e99",
+    "8fc0f03b0f4c3b33"
+   ],
+   "dhash": [
+    "9655216959aef8e0",
+    "d8e08a65696b5596"
+   ]
+  },
+  {
+   "id": "base1-88",
+   "name": "Professor Oak",
+   "dex_ids": [],
+   "phash": [
+    "9c7e81d17bcc8c92",
+    "c9d4d47b2e669930"
+   ],
+   "dhash": [
+    "965c353759e6d0e4",
+    "d8e0986513138596"
+   ]
+  },
+  {
+   "id": "base1-89",
+   "name": "Revive",
+   "dex_ids": [],
+   "phash": [
+    "9f6e30b19386ce8c",
+    "cac4651be60d9b36"
+   ],
+   "dhash": [
+    "965661495aaaba7c",
+    "c1a2aaa569791196"
+   ]
+  },
+  {
+   "id": "base1-9",
+   "name": "Magneton",
+   "dex_ids": [
+    82
+   ],
+   "phash": [
+    "bb7a909590a395c7",
+    "eed0c53fc40dc06d"
+   ],
+   "dhash": [
+    "59356b1771764d51",
+    "714d917117295365"
+   ]
+  },
+  {
+   "id": "base1-90",
+   "name": "Super Potion",
+   "dex_ids": [],
+   "phash": [
+    "bf3ec1c11e8c4d92",
+    "ea95946b6b371838"
+   ],
+   "dhash": [
+    "961f33337982a2e4",
+    "d0b2bc6133330796"
+   ]
+  },
+  {
+   "id": "base1-91",
+   "name": "Bill",
+   "dex_ids": [],
+   "phash": [
+    "d46e21817ae4b69b",
+    "81c4743b2f4ef331"
+   ],
+   "dhash": [
+    "96564475f0d6e8e4",
+    "d8e894f051d99596"
+   ]
+  },
+  {
+   "id": "base1-92",
+   "name": "Energy Removal",
+   "dex_ids": [],
+   "phash": [
+    "fe6a81916ec0c9cb",
+    "abc0c43b3b6e9c61"
+   ],
+   "dhash": [
+    "960f2b256dbafce4",
+    "d8c0a2495b2b0d96"
+   ]
+  },
+  {
+   "id": "base1-93",
+   "name": "Gust of Wind",
+   "dex_ids": [],
+   "phash": [
+    "e96b948478e92fc2",
+    "bcd1c12e2d477a68"
+   ],
+   "dhash": [
+    "9655571351a2e0f4",
+    "c0f0ba5537154596"
+   ]
+  },
+  {
+   "id": "base1-94",
+   "name": "Potion",
+   "dex_ids": [],
+   "phash": [
+    "de6a81a16ecc9693",
+    "8bd4d40b3b66c339"
+   ],
+   "dhash": [
+    "9655713131c4d0e4",
+    "d8d09c7373711596"
+   ]
+  },
+  {
+   "id": "base1-95",
+   "name": "Switch",
+   "dex_ids": [],
+   "phash": [
+    "fe7a81c56e3232c8",
+    "abd0d46f3b986660"
+   ],
+   "dhash": [
+    "9657296d63bef0e4",
+    "d0d0823949691596"
+   ]
+  },
+  {
+   "id": "base1-96",
+   "name": "Double Colorless Energy",
+   "dex_ids": [],
+   "phash": [
+    "9bf86c6352ccc133",
+    "ce5239c907f69499"
+   ],
+   "dhash": [
+    "076f70794dcc7345",
+    "4d11cc4d61f10917"
+   ]
+  },
+  {
+   "id": "base1-97",
+   "name": "Fighting Energy",
+   "dex_ids": [],
+   "phash": [
+    "b39ee4379ac134c2",
+    "e634b11d8f6b6168"
+   ],
+   "dhash": [
+    "5f5551714ddcceb3",
+    "328cc44d71755505"
+   ]
+  },
+  {
+   "id": "base1-98",
+   "name": "Fire Energy",
+   "dex_ids": [],
+   "phash": [
+    "b3dee4365ae130c2",
+    "e674b09c0f4f6568"
+   ],
+   "dhash": [
+    "5d55517169dcceb3",
+    "328cc46971755505"
+   ]
+  },
+  {
+   "id": "base1-99",
+   "name": "Grass Energy",
+   "dex_ids": [],
+   "phash": [
+    "b39ee5369a813cc2",
+    "e674b09c8e6b6968"
+   ],
+   "dhash": [
+    "565551714dd4cef3",
+    "308cd44d31755515"
+   ]
+  }
+ ]
+}
