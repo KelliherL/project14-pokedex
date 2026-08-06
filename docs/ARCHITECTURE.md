@@ -70,6 +70,13 @@ flowchart TD
   ablation only — artwork→toy rendition shift is a documented failure
   mode). DINOv3 benchmarked as a challenger, licence permitting. See
   [the figurine frontier check](research/2026-08-06-figurine-recognition-frontier.md).
+- **Stretch tier (open-set fallback):** CNOS-style render templates of
+  game models (~40 viewpoints/species, same DINOv2 + kNN index, lower
+  trust weight) for a confidence-gated "best-effort guess" on unknown
+  figurines — the sanctioned generalisation lane, never the headline
+  promise. Adversarially reviewed in
+  [the data-sources check](research/2026-08-06-figurine-data-sources.md);
+  render assets are internal-only (IP).
 - **Explanation payload:** nearest-neighbour exemplar strip (winner **and**
   runner-up), top-5 similarity bars, one Grad-CAM at lock-on targeted at
   cosine similarity to the matched exemplar. Raw attention maps and live

@@ -138,3 +138,39 @@ frontier note):
 Kill criteria are in the frontier notes; each maps to a named fallback
 (ORB stays; ViT-B or linear head; drop a display rather than caption it
 dishonestly).
+
+## Addendum (2026-08-06, later) — the generalisation challenge
+
+The technical lead formally challenged the closed-set framing ("there must
+be an existing dataset or a stronger generalised attempt"). An adversarial
+spike attempted to refute the three underlying claims — full note:
+[figurine data sources](2026-08-06-figurine-data-sources.md). Outcome:
+
+- **"No public figurine photo dataset exists" survived** a wider net than
+  the original check (Zenodo, IEEE DataPort, GitHub, full HF sweep). The
+  claim is now adversarially reviewed, not just asserted.
+- **The corollary "only self-captured photos can work" fell.** Renders of
+  the actual game models (~900–1,000 species rippable) matched via frozen
+  DINOv2 is measured SOTA technology (CNOS on BOP; Brickognize's
+  renders+~20-real recipe). Artwork≠renders; the rendition-shift argument
+  was being over-applied.
+- **"Generalised any-merch recognition ≥90% offline" remains nonexistent**
+  anywhere, cloud included; FOCI (EMNLP 2024) shows vision-LLMs
+  *underperform* CLIP-style retrieval at fine-grained ID.
+
+Plan changes adopted:
+
+1. Turntable capture for the event set **stands** (only evidence-backed
+   path to the demo bar), but spike b′ gains a **frame-count ablation**
+   (10/25/50/150) — capture may drop from ~10 to ~2 min per figurine.
+2. **New stretch tier: render-template species fallback** — CNOS-style ~40
+   Blender viewpoints per species, same DINOv2, same kNN index, lower
+   trust weight, confidence-gated "best-effort guess" voice line. This is
+   the sanctioned "generalised" lane; it is never the headline promise.
+   IP: ripped-model renders are internal-only, never redistributed —
+   added to the client sign-off list.
+3. **New experiment worth owning:** renders-only vs renders+20-real vs
+   150-real on 5 figurines — no measured Pokémon sim-to-real datapoint
+   exists anywhere; ours would be a report highlight.
+4. Marketplace-photo scraping **dropped** (ToS-dirty, curation-heavy,
+   worse domain match than 10 minutes of turntable).
