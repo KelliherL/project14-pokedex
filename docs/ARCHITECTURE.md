@@ -2,7 +2,9 @@
 
 > **Status: PRELIMINARY** — drafted 2026-07-29, revised 2026-08-06 for the
 > team repo; still pre-client-meeting. Grounded in
-> [the research note](research/2026-07-29-pokedex-outreach-cv.md) (claims
+> [the research note](research/2026-07-29-pokedex-outreach-cv.md) and the
+> 2026-08-06 frontier checks, synthesised in
+> [the approach note](research/2026-08-06-approach-synthesis.md) (claims
 > there are graded and cited; this doc states them without repeating the
 > citations). The walking skeleton in `app/` implements this shape with the
 > figurine path stubbed.
@@ -34,27 +36,45 @@ flowchart TD
     d -->|"no card-shaped quad"| none["kind = none<br/>friendly retry prompt"]
     d -->|"quad found"| r["Perspective rectify<br/>to canonical 245×337 view"]
     r --> h["pHash + dHash<br/>(multi-orientation)"]
-    h --> nn["Hamming nearest neighbour<br/>vs local card DB"]
+    h --> nn["Hamming nearest neighbour<br/>vs local card DB (4 orientations)"]
     nn --> acc{"best distance ≤ threshold<br/>AND clear margin over 2nd-best?"}
-    acc -->|yes| hit["card → National Dex id"]
+    acc -->|yes| tv["Temporal voting<br/>(≈6-of-10 frame ring buffer)"]
     acc -->|no| unsure["Unsure — never a confident<br/>wrong guess"]
-    hit -.->|planned| tv["Temporal voting across frames"]
+    tv -->|"vote converges"| ver["Keypoint verify at lock-on<br/>(ORB→XFeat + RANSAC homography)"]
+    ver -->|"inliers ≥ T, clear of runner-up"| hit["card → National Dex id"]
+    ver -->|"otherwise"| unsure
 ```
 
 - **Accept criterion** is probe-calibrated (distance + margin); the
   σ-below-mean statistic is shown as the confidence display. σ alone
   under-separates junk at this DB size — measured 2026-07-29.
+- **Two-layer design (2026-08-06):** the hash lane runs every frame (cheap,
+  live); temporal voting + keypoint geometric verification fire once at
+  lock-on. The verifier's RANSAC inlier count is both the accept gate *and*
+  the match-lines display — the decision is the explanation. ORB first
+  (zero new dependencies), XFeat as the evidence-backed upgrade if ORB
+  proves flaky on holo cards. See
+  [the card frontier check](research/2026-08-06-card-recognition-frontier.md).
 - **Explanation payload:** detected quad, rectified "as the AI sees it" view,
-  distance distribution, ORB keypoint match lines vs the matched reference.
+  top-5 distance race, voting strip, keypoint match lines
+  (inliers/outliers) vs the matched reference.
 
-### Figurine path (closed-set classification)
+### Figurine path (closed-set instance recognition)
 
-- **Candidate A:** CLIP/SigLIP embedding → kNN over reference photos of the
-  actual event figurines.
-- **Candidate B:** fine-tuned checkpoint (1,025-class ViT or YOLO-cls) on the
-  same photos.
-- Decided by spike (b) below.
-- **Explanation payload:** Grad-CAM/EigenCAM heatmap + top-5 confidence bars.
+- **Primary:** frozen **DINOv2 ViT-S/14 (with registers) → cosine kNN** over
+  session-diverse reference photos of the actual event figurines, captured
+  on the event camera (turntable protocol). Backdrop-subtraction crop; burst
+  decision over ~10 frames with similarity + margin thresholds.
+- **Control arm:** linear probe on the same embeddings + ConvNeXt-Tiny
+  ImageNet fine-tune (the Pokémon-artwork checkpoint is a curiosity
+  ablation only — artwork→toy rendition shift is a documented failure
+  mode). DINOv3 benchmarked as a challenger, licence permitting. See
+  [the figurine frontier check](research/2026-08-06-figurine-recognition-frontier.md).
+- **Explanation payload:** nearest-neighbour exemplar strip (winner **and**
+  runner-up), top-5 similarity bars, one Grad-CAM at lock-on targeted at
+  cosine similarity to the matched exemplar. Raw attention maps and live
+  UMAP projections are refused on honesty grounds — see
+  [the explainability frontier check](research/2026-08-06-live-explainability-frontier.md).
 
 ### The 30-second visitor loop
 
@@ -160,17 +180,20 @@ flowchart LR
 
 ## Week-1 spikes (research → verify → build)
 
-Each spike exists to kill or confirm an assumption before we commit.
+Sharpened 2026-08-06 into one three-day harness — full falsifiable check
+lists live in the frontier notes; the summary and kill criteria are in
+[the approach synthesis](research/2026-08-06-approach-synthesis.md).
 
-| # | Spike | Kills/confirms | Kill criterion |
+| # | Spike | Kills/confirms | Headline kill criterion |
 |---|---|---|---|
-| a | Card pipeline vs one cached set, real cards on a desk | the 7–26 ms/frame + matching claims on *our* hardware/cards | < 10 fps or frequent misses on clean captures |
-| b | CLIP-kNN vs fine-tuned ViT on ~5 home-photographed figurines | which figurine backend to build | neither ≥ 90% on a held-out angle/lighting split → rethink (more photos, segmentation, hybrid) |
-| c | Live Grad-CAM loop FPS on our laptops | the explainability display budget | < 5 fps CPU → use EigenCAM/feature-map grid instead |
+| a′ | Cards under stress: glare/sleeve/skew video, voting, ORB inlier gap, XFeat fps | the hash-shortlist → vote → keypoint-verify design on *our* hardware/cards | confident wrong accepts under glare, or no ORB inlier gap correct-vs-impostor |
+| b′ | DINOv2-kNN vs control arm on ~5 home-photographed figurines | the figurine backend choice | kNN < 95% top-1 on a held-out session while the fine-tune control clears it |
+| c′ | The show: CAM budget + sanity tests, match-line render, legibility pilot | the explainability display stack | heatmap fails randomise-weights/swap-target sanity test → display cut |
 
-The walking skeleton is spike (a)'s harness plus the full-loop demo
+The walking skeleton is spike (a′)'s harness plus the full-loop demo
 (identify → explain → speak). The headless selftest passes on synthetic
-composites; real-webcam validation on our cards is what spike (a) closes out.
+composites; real-webcam validation on our cards is what spike (a′) closes
+out.
 
 ## Open decisions (blocked on the client meeting)
 
