@@ -27,7 +27,7 @@ The full loop — identify → explain → speak — runs end to end today:
 
 | Piece | State |
 |---|---|
-| Card recognition | **Real.** Contour detect → perspective rectify → pHash+dHash → calibrated nearest-neighbour against a locally cached TCGdex set (Base Set), with live explanation overlay. |
+| Card recognition | **Real.** Contour detect → aspect-aware rectify → pHash+dHash → calibrated nearest-neighbour against a locally cached TCGdex set (Base Set) → 6-of-10 temporal vote → ORB+RANSAC geometric verify at lock-on, with live explanation overlay. |
 | Figurine recognition | **Labelled stub** (canned top-5). Replaced by the spike-(b) winner — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). |
 | Dex data | Real subset (69 species via PokeAPI), served through the database-agnostic `DexDataSource` seam. |
 | Speech | Stub-grade (Windows built-in voice, offline). Pre-generated Piper WAVs later. |
@@ -102,13 +102,13 @@ than to the abstract.
 
 ## Known limitations (deliberate, tracked)
 
-- Single-frame matching — no temporal voting yet (planned; masks blur/glare).
-- Card must be roughly upright (normal + 180° hashes only, no 90° rotation).
 - Otsu-threshold detection assumes a contrasting backdrop — which the real
   station will guarantee physically (see docs/ARCHITECTURE.md).
 - Figurine mode is theatre; it says so on screen.
 - Dex entries are uncurated latest-English for now — kid-safe whitelisting is
   a client sign-off item.
+- Verified lock-on is validated on synthetic stress scenes; real-webcam
+  validation (spike a′) closes it out.
 
 ## Near-term work
 

@@ -127,7 +127,9 @@ building against either.
 | Component | Responsibility | Status |
 |---|---|---|
 | `app/recognisers/base.py` | `Identification` dataclass — the contract | real |
-| `app/recognisers/card_matcher.py` | detect → rectify → hash → NN match | **real** (single-frame; no temporal voting yet) |
+| `app/recognisers/card_matcher.py` | detect → aspect-aware rectify → hash → NN match + shortlist | **real** (90° presentations recovered) |
+| `app/recognisers/voting.py` | 6-of-10 temporal vote over raw top-1s | **real** (locks 10/10 correct under synthetic harsh glare) |
+| `app/recognisers/verify.py` | ORB+RANSAC geometric verify of the voted winner at lock-on | **real** (accept gate = the match-lines data) |
 | `app/recognisers/figurine_stub.py` | closed-set classifier | **stub** (canned output, labelled STUB) |
 | `app/dex_source.py` | `DexDataSource` protocol + bundled JSON backend | real (JSON reference impl) |
 | `app/dex.py` | species → name/genus/flavor text, speech line | real (subset of PokeAPI data) |

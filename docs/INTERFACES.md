@@ -117,7 +117,18 @@ Card matcher (real, today):
 | `mean_distance` | `float` | mean distance across the whole DB |
 | `sigma` | `float` | how many σ below the mean the best match sits — the headline "sureness" stat |
 | `criterion` | `str` | human-readable accept rule, printable verbatim |
+| `shortlist` | `[{id, distance}×5]` | hash top-5 — feeds the distance race and the verify stage |
 | `reason` | `str` | only when `kind == "none"` — why nothing was detected |
+
+After lock-on (temporal vote converged and the geometric verify ran), the
+locked `Identification` additionally carries:
+
+| Key | Type | Render as |
+|---|---|---|
+| `locked` | `bool` | the lock-on beat — freeze the explanation panel |
+| `verified` | `bool` | whether geometric verification ran (needs the local image cache) |
+| `verified_inliers` | `int` | RANSAC inlier count for the winner — the "n matched points" headline |
+| `verified_second` | `int` | runner-up's inlier count — the comparison that makes it honest |
 
 Figurine path (stub today; the real classifier keeps these keys):
 
