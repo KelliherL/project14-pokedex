@@ -6,8 +6,10 @@
 > 2026-08-06 frontier checks, synthesised in
 > [the approach note](research/2026-08-06-approach-synthesis.md) (claims
 > there are graded and cited; this doc states them without repeating the
-> citations). The walking skeleton in `app/` implements this shape with the
-> figurine path stubbed.
+> citations), with the headline numbers re-measured on our own hardware in
+> [the measured baselines](research/2026-08-07-measured-baselines.md). The
+> walking skeleton in `app/` implements this shape with the figurine path
+> stubbed.
 
 ## Core decision: two recognisers behind one interface
 
@@ -64,7 +66,13 @@ flowchart TD
 - **Primary:** frozen **DINOv2 ViT-S/14 (with registers) → cosine kNN** over
   session-diverse reference photos of the actual event figurines, captured
   on the event camera (turntable protocol). Backdrop-subtraction crop; burst
-  decision over ~10 frames with similarity + margin thresholds.
+  decision over ~10 frames with similarity + margin thresholds. The exact
+  engine and evaluation protocol are **already validated end-to-end on the
+  CORe50 public benchmark** (50 hand-held objects, held-out sessions):
+  burst-of-10 vote **96.2%** on data harder than the exhibit setting, with
+  a measured reference-count knee at ~80 frames/object — see
+  [the measured baselines](research/2026-08-07-measured-baselines.md).
+  Figurine day is data collection, not development.
 - **Control arm:** linear probe on the same embeddings + ConvNeXt-Tiny
   ImageNet fine-tune (the Pokémon-artwork checkpoint is a curiosity
   ablation only — artwork→toy rendition shift is a documented failure
@@ -196,7 +204,7 @@ lists live in the frontier notes; the summary and kill criteria are in
 | # | Spike | Kills/confirms | Headline kill criterion |
 |---|---|---|---|
 | a′ | Cards under stress: glare/sleeve/skew video, voting, ORB inlier gap, XFeat fps | the hash-shortlist → vote → keypoint-verify design on *our* hardware/cards | confident wrong accepts under glare, or no ORB inlier gap correct-vs-impostor |
-| b′ | DINOv2-kNN vs control arm on ~5 home-photographed figurines | the figurine backend choice | kNN < 95% top-1 on a held-out session while the fine-tune control clears it |
+| b′ | DINOv2-kNN (CORe50-validated) vs control arm on ~5 real figurines + reference-count ablation + unknown-rejection gate | the figurine backend on the *real* toys | kNN < 95% top-1 on a held-out session while the fine-tune control clears it, or unknown rejection < 90% on the matte-backdrop stand |
 | c′ | The show: CAM budget + sanity tests, match-line render, legibility pilot | the explainability display stack | heatmap fails randomise-weights/swap-target sanity test → display cut |
 
 The walking skeleton is spike (a′)'s harness plus the full-loop demo

@@ -129,7 +129,10 @@ outreach with third-party characters before — who checks that side?**
 > *Why: free non-commercial educational use of names/entries/card images is
 > common in fan tools, but a university event should get a yes from whoever
 > handles this. We flag it now so it's not a week-before surprise. (There is
-> precedent: the data sources we'd use are long-running public fan projects.)*
+> precedent: the data sources we'd use are long-running public fan projects.)
+> The sign-off should also cover the stretch tier's reference imagery
+> rendered from game 3D assets — internal-use only, never redistributed —
+> see the figurine stretch tier in ARCHITECTURE.md.*
 
 **Some Pokédex entries are genuinely dark (ghost stories, "it carries dead
 children" style lore). Are you happy for us to curate which entries are
@@ -160,9 +163,11 @@ rehearsal at the actual venue (or similar) before the event?**
 
 ## The one-paragraph summary the spokesperson can close with
 
-> "Our plan is to research two recognition approaches — one tuned for cards,
-> one for figurines — build a small working demo early, and bring it to you
-> for feedback rather than describing it in the abstract. The three things
-> that most help us right now are: (1) knowing the internet situation at the
-> venue, (2) borrowing the exact figurines/cards early, and (3) a named
-> contact for the privacy/IP sign-offs."
+> "We already have a working demo: hold a card up to a webcam and it
+> recognises it, speaks the Pokédex entry, and shows on screen how it knew —
+> and it runs entirely offline on a laptop. The figurine side uses the same
+> kind of approach; its engine is validated on a public benchmark and is
+> waiting only on the real figurines. The three things that most help us
+> right now are: (1) borrowing the exact figurines/cards as early as
+> possible, (2) knowing the internet/power/staffing situation at the venue,
+> and (3) a named contact for the privacy/IP sign-offs."
