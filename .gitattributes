@@ -1,10 +1,12 @@
-# Capture assets go through LFS. Images/ and Models/ predate this and remain
-# plain blobs by decision (rewriting shared history is not worth the re-clone);
-# these patterns keep future captures out of the repo's permanent weight.
-*.mov filter=lfs diff=lfs merge=lfs -text
-*.mp4 filter=lfs diff=lfs merge=lfs -text
-*.jpeg filter=lfs diff=lfs merge=lfs -text
-
-# Small committed artifacts the app needs at runtime are NOT LFS.
-data/figurines/exemplars/*.jpg -filter -diff -merge text=auto
-data/cards/hashes.json -filter -diff -merge text=auto
+# Text normalisation only. Deliberately NO `filter=lfs` entries: Images/ and
+# Models/ are already committed as plain blobs, and declaring an LFS filter
+# over extensions that exist as plain objects makes checkout fail outright on
+# any machine without git-lfs installed. Large-asset policy is enforced by the
+# repo-weight check in CI instead, which needs nothing installed locally.
+* text=auto
+*.png binary
+*.webp binary
+*.jpg binary
+*.jpeg binary
+*.mov binary
+*.npz binary

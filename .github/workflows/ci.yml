@@ -27,6 +27,9 @@ jobs:
 
       - run: ruff check .
 
+      - name: Repo weight guard
+        run: python scripts/check_repo_weight.py --all
+
       - run: pytest
 
       # The end-to-end selftest composites real reference card images into
