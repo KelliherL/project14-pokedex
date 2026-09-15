@@ -63,16 +63,26 @@ flowchart TD
 
 ### Figurine path (closed-set instance recognition)
 
-- **Primary:** frozen **DINOv2 ViT-S/14 (with registers) → cosine kNN** over
-  session-diverse reference photos of the actual event figurines, captured
-  on the event camera (turntable protocol). Backdrop-subtraction crop; burst
-  decision over ~10 frames with similarity + margin thresholds. The exact
-  engine and evaluation protocol are **already validated end-to-end on the
-  CORe50 public benchmark** (50 hand-held objects, held-out sessions):
-  burst-of-10 vote **96.2%** on data harder than the exhibit setting, with
-  a measured reference-count knee at ~80 frames/object — see
-  [the measured baselines](research/2026-08-07-measured-baselines.md).
-  Figurine day is data collection, not development.
+- **Primary, and now BUILT** (`app/recognisers/figurine_knn.py`): frozen
+  **DINOv2 ViT-S/14 (with registers) → cosine kNN** over turntable captures
+  of the actual event figurines. Background-plate crop; burst decision over
+  10 frames; **margin** accept gate. Validated first on CORe50 (burst-of-10
+  **96.2%**, held-out sessions), then built and measured on nine real
+  3D-printed figurines — see
+  [the figurine lane note](research/2026-09-15-figurine-lane-measured.md).
+  Three findings changed the design:
+  - The accept gate is **relative, not absolute**. A lab-calibrated absolute
+    similarity threshold rejected 100% of its own correct answers under a 15°
+    rotation; the margin gate held 74% of them.
+  - The margin is measured against the best **different answer**, not the
+    next reference row, or two prints of one species refuse each other.
+  - Recognition is **per-object, not per-species**: an unseen print of a
+    known species does not match it (6% and 42% across two Jolteon prints).
+    The curated set is unaffected; the unknown-merch stretch tier is not
+    reachable this way.
+  - **10–20 reference frames per figurine suffice** on a controlled stand,
+    well below the ~80 the CORe50 curve implied.
+  Figurine day is data collection, not development — confirmed.
 - **Control arm:** linear probe on the same embeddings + ConvNeXt-Tiny
   ImageNet fine-tune (the Pokémon-artwork checkpoint is a curiosity
   ablation only — artwork→toy rendition shift is a documented failure
@@ -205,6 +215,7 @@ lists live in the frontier notes; the summary and kill criteria are in
 |---|---|---|---|
 | a′ | Cards under stress: glare/sleeve/skew video, voting, ORB inlier gap, XFeat fps | the hash-shortlist → vote → keypoint-verify design on *our* hardware/cards | confident wrong accepts under glare, or no ORB inlier gap correct-vs-impostor |
 | b′ | DINOv2-kNN (CORe50-validated) vs control arm on ~5 real figurines + reference-count ablation + unknown-rejection gate | the figurine backend on the *real* toys | kNN < 95% top-1 on a held-out session while the fine-tune control clears it, or unknown rejection < 90% on the matte-backdrop stand |
+| | **Status 2026-09-15: built, partially evaluated.** 100% on a held-out rotation arc, 89.5% unknown rejection, 100% out-of-domain rejection. The kill criterion itself is **not yet evaluable** — all ten captures are one session, so no held-out session exists. A second capture is the open blocker. | | |
 | c′ | The show: CAM budget + sanity tests, match-line render, legibility pilot | the explainability display stack | heatmap fails randomise-weights/swap-target sanity test → display cut |
 
 The walking skeleton is spike (a′)'s harness plus the full-loop demo

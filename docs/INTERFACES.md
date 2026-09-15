@@ -130,13 +130,36 @@ locked `Identification` additionally carries:
 | `verified_inliers` | `int` | RANSAC inlier count for the winner — the "n matched points" headline |
 | `verified_second` | `int` | runner-up's inlier count — the comparison that makes it honest |
 
-Figurine path (stub today; the real classifier keeps these keys):
+Figurine path (**real classifier as of 2026-09-15**; the stub still emits
+`top5` and `note` when no index is built):
 
 | Key | Type | Render as |
 |---|---|---|
-| `top5` | `[(name, prob)×5]` | top-5 confidence bars |
-| `note` | `str` | stub disclosure text |
-| *(later)* `heatmap` | image | Grad-CAM/EigenCAM overlay — arrives with the real model |
+| `top5` | `[(name, similarity)×5]` | top-5 confidence bars. Note these are **cosine similarities, not probabilities** — they do not sum to 1, and the gap between the top two is what matters |
+| `exemplars` | `[{label, image, similarity}×3]` | the exemplar strip: the actual nearest reference frames the decision was made from. `image` is a path relative to `data/figurines/` |
+| `best_label` | `str` | reference class, e.g. `"Jolteon-A"`. Internal identity — **do not show this to visitors**, show `label` |
+| `best_similarity` | `float` | cosine similarity to the nearest reference |
+| `runner_up_similarity` | `float` | best similarity among references giving a *different answer* |
+| `margin` | `float` | `best - runner_up`; this is the accept decision and the headline "sureness" stat |
+| `criterion` | `str` | human-readable accept rule, printable verbatim |
+| `crop` | BGR image (`np.ndarray`) | the "as the AI sees it" view, equivalent to the card lane's `rectified` |
+| `bbox` | `[x,y,w,h]` or `None` | where the figurine was found. **`None` means no background plate has been captured** — render the "press b with the stand empty" prompt |
+| `cropped_by` | `str` | which crop path ran, printable |
+| `note` | `str` | stub disclosure text (stub only) |
+| *(later)* `heatmap` | image | Grad-CAM/EigenCAM overlay |
+
+On lock-on the figurine payload additionally carries `locked: True`, matching
+the card lane.
+
+Two semantics the UI must not get wrong:
+
+- **`label` is the species, `best_label` is the object.** Recognition is
+  per-figurine, not per-species: two different prints of Jolteon are two
+  reference classes that both answer "Jolteon" with dex 135. Visitors see
+  `label`.
+- **Similarity is not confidence.** Use `confidence` for any 0..1 display;
+  `best_similarity` sits around 0.87–0.99 for every real match and is
+  meaningless as a bar on its own.
 
 ### Render obligations (from VISION.md — these are the product)
 
