@@ -27,7 +27,7 @@ The full loop — identify → explain → speak — runs end to end today:
 
 | Piece | State |
 |---|---|
-| Card recognition | **Real.** Contour detect → aspect-aware rectify → pHash+dHash → calibrated nearest-neighbour against a locally cached TCGdex set (Base Set) → 6-of-10 temporal vote → ORB+RANSAC geometric verify at lock-on, with live explanation overlay. |
+| Card recognition | **Real, and honestly scoped.** Contour detect → aspect-aware rectify → pHash+dHash → nearest-neighbour against a locally cached TCGdex set → 6-of-10 temporal vote → ORB+RANSAC verify at lock-on. Excellent on synthetic scenes; on **real photographs** clean English cards reach recall@10 0.833 while **glare defeats retrieval** and Japanese cards have no usable reference data — see [the real-photo note](docs/research/2026-09-15-card-lane-real-photos.md). |
 | Figurine recognition | **Labelled stub** (canned top-5) on screen; the backend is **decided and validated** — frozen DINOv2 + cosine kNN, dry-run on the CORe50 public benchmark (96.2% burst-of-10 vote, held-out sessions). Blocked only on the real figurines — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). |
 | Dex data | Real subset (69 species via PokeAPI), served through the database-agnostic `DexDataSource` seam. |
 | Speech | Stub-grade (Windows built-in voice, offline). Pre-generated Piper WAVs later. |
