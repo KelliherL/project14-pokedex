@@ -53,6 +53,10 @@ def test_packed_search_matches_on_a_real_reference_card(matcher):
     from pathlib import Path
 
     img_dir = Path(__file__).resolve().parents[1] / "data" / "cards" / "images"
+    # CI runs pytest before the card-image cache step, so the directory may not
+    # exist at all; iterdir() would raise before a skip could fire.
+    if not img_dir.is_dir():
+        pytest.skip("reference images not cached")
     files = sorted(p for p in img_dir.iterdir() if p.suffix in {".webp", ".png"})
     if not files:
         pytest.skip("reference images not cached")
