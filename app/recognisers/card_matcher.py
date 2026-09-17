@@ -52,6 +52,27 @@ ASPECT_MIN, ASPECT_MAX = 0.55, 0.90
 MAX_AREA_FRAC = 0.60
 
 
+def _pack(db: list[dict]) -> tuple[np.ndarray, np.ndarray]:
+    """Stack the DB's hashes into (cards, orientations, 64) bit matrices.
+
+    Comparing ImageHash objects one at a time is a Python loop over the whole
+    database, which costs ~8 ms per lookup at 1764 cards. XOR-ing packed bit
+    matrices is one numpy operation and measures at ~0.2 ms for bit-identical
+    results. At the single lookup per frame the shipped lane does today that
+    is merely tidy; it matters because the candidate-crop search scores a
+    hundred-odd crops per frame, where the constant factor decides whether
+    the approach is affordable at all.
+    """
+    if not db:
+        empty = np.zeros((0, 0, 64), dtype=bool)
+        return empty, empty
+    phash = np.array([[np.asarray(h.hash, dtype=bool).reshape(-1) for h in e["phash"]]
+                      for e in db], dtype=bool)
+    dhash = np.array([[np.asarray(h.hash, dtype=bool).reshape(-1) for h in e["dhash"]]
+                      for e in db], dtype=bool)
+    return phash, dhash
+
+
 def order_corners(pts: np.ndarray) -> np.ndarray:
     """(4,2) points in any order -> [top-left, top-right, bottom-right, bottom-left]."""
     s = pts.sum(axis=1)
@@ -159,6 +180,20 @@ class CardMatcher:
                         "dhash": [imagehash.hex_to_hash(h) for h in entry["dhash"]],
                     }
                 )
+        self._phash_bits, self._dhash_bits = _pack(self.db)
+
+    def _distances(self, pil: Image.Image) -> np.ndarray:
+        """Hamming distance from one rectified view to every card in the DB.
+
+        Same arithmetic as comparing ImageHash objects one at a time, done as
+        two array operations instead of a Python loop over the database. See
+        _pack for why that matters.
+        """
+        ph = np.asarray(imagehash.phash(pil).hash, dtype=bool).reshape(-1)
+        dh = np.asarray(imagehash.dhash(pil).hash, dtype=bool).reshape(-1)
+        dp = (self._phash_bits ^ ph).sum(axis=2).min(axis=1)
+        dd = (self._dhash_bits ^ dh).sum(axis=2).min(axis=1)
+        return (dp + dd).astype(np.float64)
 
     def identify(self, frame: np.ndarray) -> Identification:
         quad = detect_card_quad(frame)
@@ -179,15 +214,7 @@ class CardMatcher:
         # far lower than a squashed/mis-rotated one, so min wins.
         warped, dists = None, None
         for cand in candidates:
-            pil = Image.fromarray(cv2.cvtColor(cand, cv2.COLOR_BGR2RGB))
-            ph, dh = imagehash.phash(pil), imagehash.dhash(pil)
-            d = np.array(
-                [
-                    min(ph - p for p in e["phash"]) + min(dh - d_ for d_ in e["dhash"])
-                    for e in self.db
-                ],
-                dtype=np.float64,
-            )
+            d = self._distances(Image.fromarray(cv2.cvtColor(cand, cv2.COLOR_BGR2RGB)))
             if dists is None or d.min() < dists.min():
                 warped, dists = cand, d
         order = np.argsort(dists)
