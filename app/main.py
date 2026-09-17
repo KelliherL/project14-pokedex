@@ -86,7 +86,12 @@ def main() -> int:
         print(f"error: cannot open camera {args.camera} (try --camera 1)")
         return 1
 
-    verifier = CardVerifier()
+    # Pass card names so reprints of one card cannot become each other's
+    # runner-up in the accept rule. Harmless on a single set, necessary the
+    # moment the database holds more than one.
+    verifier = CardVerifier(
+        names={e["id"]: e["name"] for e in recognisers["card"].db}
+    )
     votes = VoteBuffer()
     locked: Identification | None = None
     empty_streak = 0
