@@ -19,6 +19,10 @@ IMG_DIR = Path(__file__).resolve().parents[1] / "data" / "cards" / "images"
 
 @pytest.fixture(scope="module")
 def cards():
+    # CI runs pytest before the card-image cache step, so the directory may not
+    # exist at all; iterdir() would raise before a skip could fire.
+    if not IMG_DIR.is_dir():
+        pytest.skip("reference images not cached")
     files = sorted(p for p in IMG_DIR.iterdir() if p.suffix in {".webp", ".png"})
     if len(files) < 3:
         pytest.skip("reference images not cached")
