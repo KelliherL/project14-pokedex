@@ -31,6 +31,10 @@ def matcher():
 
 @pytest.fixture(scope="module")
 def reference_card():
+    # CI runs pytest before the card-image cache step, so the directory may not
+    # exist at all; iterdir() would raise before a skip could fire.
+    if not IMG_DIR.is_dir():
+        pytest.skip("reference images not cached")
     files = sorted(p for p in IMG_DIR.iterdir() if p.suffix in {".webp", ".png"})
     if not files:
         pytest.skip("reference images not cached")
