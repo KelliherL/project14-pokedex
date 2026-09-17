@@ -138,6 +138,8 @@ Figurine path (**real classifier as of 2026-09-15**; the stub still emits
 | `top5` | `[(name, similarity)×5]` | top-5 confidence bars. Note these are **cosine similarities, not probabilities** — they do not sum to 1, and the gap between the top two is what matters |
 | `exemplars` | `[{label, image, similarity}×3]` | the exemplar strip: the actual nearest reference frames the decision was made from. `image` is a path relative to `data/figurines/` |
 | `best_label` | `str` | reference class, e.g. `"Jolteon-A"`. Internal identity — **do not show this to visitors**, show `label` |
+| `best_answer` | `str` | what the visitor would be told, e.g. `"Jolteon"`, **regardless of whether this single frame cleared the gate**. Two prints of one species share an answer |
+| `best_dex_id` | `int \| None` | dex id for `best_answer`, same caveat |
 | `best_similarity` | `float` | cosine similarity to the nearest reference |
 | `runner_up_similarity` | `float` | best similarity among references giving a *different answer* |
 | `margin` | `float` | `best - runner_up`; this is the accept decision and the headline "sureness" stat |
@@ -150,6 +152,13 @@ Figurine path (**real classifier as of 2026-09-15**; the stub still emits
 
 On lock-on the figurine payload additionally carries `locked: True`, matching
 the card lane.
+
+**The accept decision is made across a burst of ten frames, not per frame.**
+`label` is `None` on individual frames until the burst agrees, so a UI should
+render the unsure state while the visitor settles the figurine and expect the
+answer roughly two thirds of a second later. `best_answer` is populated the
+whole time and is what the burst votes on, so it is the right key for any
+"thinking..." affordance that wants to show progress.
 
 Two semantics the UI must not get wrong:
 

@@ -24,7 +24,7 @@ from app.recognisers.card_matcher import CardMatcher
 from app.recognisers.figurine_knn import FigurineClassifier
 from app.recognisers.figurine_stub import FigurineClassifierStub
 from app.recognisers.verify import CardVerifier
-from app.recognisers.voting import VoteBuffer
+from app.recognisers.voting import BurstGate, FrameScore, VoteBuffer
 from app.tts import speak
 
 UNLOCK_AFTER_EMPTY_FRAMES = 10
@@ -63,14 +63,19 @@ def lock_from(ident: Identification, matcher: CardMatcher, verifier: CardVerifie
 
 
 def figurine_lock(ident: Identification, winner: str) -> Identification | None:
-    """Vote converged on `winner`: accept only if this frame also clears the
-    margin gate. Same shape as the card lane — vote on the raw top-1, let the
-    gate decide at lock-on rather than starving the vote."""
-    if ident.explanation.get("best_label") != winner or ident.label is None:
+    """The burst gate accepted `winner`: present it.
+
+    The decision has already been made across ten frames, so this does not
+    re-gate on the single frame in hand. Judging one frame is what used to
+    throw away correct answers: under a new-room lighting shift the vote was
+    right 100% of the time and the per-frame gate accepted only 80%.
+    """
+    if ident.explanation.get("best_answer") != winner:
         return None
     return Identification(
-        kind="figurine", label=ident.label, dex_id=ident.dex_id,
-        confidence=ident.confidence,
+        kind="figurine", label=winner,
+        dex_id=ident.explanation.get("best_dex_id"),
+        confidence=max(0.0, min(1.0, ident.explanation.get("margin", 0.0) / 0.25)),
         explanation={**ident.explanation, "locked": True},
     )
 
@@ -113,6 +118,7 @@ def main() -> int:
 
     verifier = CardVerifier()
     votes = VoteBuffer()
+    burst = BurstGate()
     locked: Identification | None = None
     empty_streak = 0
 
@@ -127,19 +133,23 @@ def main() -> int:
         # Figurine mode runs the same shape: embed per frame -> burst vote ->
         # margin gate at lock-on.
         if mode == "figurine" and isinstance(recognisers["figurine"], FigurineClassifier):
-            if ident.explanation.get("best_label") is None:
+            answer = ident.explanation.get("best_answer")
+            score = None if answer is None else FrameScore(
+                answer=answer,
+                similarity=ident.explanation.get("best_similarity", 0.0),
+                margin=ident.explanation.get("margin", 0.0),
+            )
+            if answer is None:
                 empty_streak += 1
                 if empty_streak >= UNLOCK_AFTER_EMPTY_FRAMES:
-                    votes.reset()
+                    burst.reset()
                     locked = None
             else:
                 empty_streak = 0
-                if locked is None:
-                    winner = votes.add(ident.explanation.get("best_label"))
-                    if winner:
-                        locked = figurine_lock(ident, winner)
-                        if locked is None:
-                            votes.reset()
+            if locked is None:
+                winner = burst.add(score)
+                if winner:
+                    locked = figurine_lock(ident, winner)
 
         # Card mode runs the full lane: hash per frame -> vote -> verify once.
         if mode == "card" and recognisers["card"].db:
@@ -167,6 +177,7 @@ def main() -> int:
         elif key == ord("m"):
             mode = "figurine" if mode == "card" else "card"
             votes.reset()
+            burst.reset()
             locked = None
         elif key == ord("b") and isinstance(recognisers["figurine"], FigurineClassifier):
             plate = []

@@ -49,12 +49,27 @@ from .base import Identification
 INDEX_PATH = Path(__file__).resolve().parents[2] / "data" / "figurines" / "index.npz"
 LABELS_PATH = Path(__file__).resolve().parents[2] / "data" / "figurines" / "labels.json"
 
-# Accept rule, calibrated on the turntable set 2026-09-15. MIN_MARGIN is the
-# 5th percentile of the clean margin distribution; MIN_SIMILARITY is a floor
-# far below any real figurine match (0.87+) and far above out-of-domain input
-# (card photos peaked at 0.27).
-MIN_MARGIN = 0.05
-MIN_SIMILARITY = 0.50
+# Accept rule, recalibrated 2026-09-17 against a burst rather than a frame,
+# and against 1896 photographs of figurines the index has never seen.
+#
+# The margin requirement is deliberately almost nothing. It began at 0.05, the
+# 5th percentile of the clean margin distribution, and that turned out to
+# refuse answers the system had got right: a margin is a DIFFERENCE of
+# similarities, so a global lighting change shrinks both sides together and
+# the difference falls while the decision gets no harder. Median margin runs
+# 0.120 clean against 0.075 under a combined new-room shift.
+#
+# The work is done instead by a LOOSE absolute similarity floor. That is not a
+# contradiction of the finding that absolute thresholds are brittle: a TIGHT
+# floor at 0.873 rejected every correct answer under a 15 degree rotation,
+# while 0.70 sits far below any genuine match and far above the 0.52 that
+# other people's figurines average. Both folds of a held-out check chose 0.70
+# independently.
+#
+# Paired with BurstGate (voting.py): 84.2% -> 95.4% correct-and-accepted,
+# 11.1% -> 0.7% of other people's figurines wrongly accepted.
+MIN_MARGIN = 0.01
+MIN_SIMILARITY = 0.70
 ACCEPT_CRITERION = (
     f"match iff best-vs-next-different-answer margin >= {MIN_MARGIN} "
     f"and similarity >= {MIN_SIMILARITY}"
@@ -283,6 +298,11 @@ class FigurineClassifier:
                 "top5": top5_display,
                 "exemplars": exemplars,
                 "best_label": best_label,
+                # What the visitor would be told, and its dex id, regardless of
+                # whether this single frame cleared the gate. The burst gate
+                # votes on these: two prints of one species are one answer.
+                "best_answer": ref.display if ref else best_label,
+                "best_dex_id": ref.dex_id if ref else None,
                 "best_similarity": round(best_sim, 4),
                 "runner_up_similarity": round(runner_up, 4),
                 "margin": round(margin, 4),
