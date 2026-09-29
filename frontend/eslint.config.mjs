@@ -34,6 +34,7 @@ export default defineConfig([
     rules: {
       // React 17+ automatic JSX runtime
       'react/react-in-jsx-scope': 'off',
+      '@stylistic/max-len': 'off',
       // Vite convention: explicit extensions on relative imports
       'import-x/extensions': ['error', 'ignorePackages', { js: 'always', jsx: 'always' }],
     },
