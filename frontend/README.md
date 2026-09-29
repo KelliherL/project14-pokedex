@@ -11,6 +11,16 @@ Then visit `localhost:5173`
 
 Swap to `npm` if not using pnpm, although it is recommended.
 
+## Mock backend (frontend development)
+Open Git Bash and navigate to the MockBackend folder inside the scripts folder, then:
+```bash
+./run_mock.sh
+```
+
+Creates `.venv-mock` and installs deps on first run. Serves MJPEG at
+`http://127.0.0.1:8000/stream` and a detection websocket at
+`ws://127.0.0.1:8000/ws`. `PORT=9000 ./run_mock.sh` to change port.
+
 ## Decisions
 Below are the decisions made at this time.
 
