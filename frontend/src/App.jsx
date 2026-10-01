@@ -55,9 +55,12 @@ function QuadOverlay({ quad }) {
 
   const points = quad.map(([x, y]) => `${x},${y}`).join(' ');
 
+  // TODO this has an issue where the overlay is not normalised to the image underneath it but instead the div
+    // that covers the whole thing BUG
   return (
       <svg
           viewBox="0 0 1 1"
+          // none was default, meet set and the aspect ratio is perfect, but alignment with the image is off
           preserveAspectRatio="none"
           className="absolute inset-0 w-full h-full pointer-events-none"
       >
@@ -74,11 +77,17 @@ function QuadOverlay({ quad }) {
 
 /// canvas for the image from the camera to go on
 function CameraCanvas({ detection }) {
-  return (
+    const [dimensions, setDimensions] = useState({height: 0, width: 0});
+      const handleImageLoad = (e) => {
+          const { naturalHeight, naturalWidth } = e.target;
+          setDimensions({ height: naturalHeight, width: naturalWidth });
+  }
+    return (
       <div className="relative aspect-video w-full bg-black overflow-hidden">
         <img
             src={STREAM_URL}
             alt="camera feed"
+            onLoad={handleImageLoad}
             className="w-full h-full object-contain"
         />
         {/*SVG quad to overlay, if there is one*/}
