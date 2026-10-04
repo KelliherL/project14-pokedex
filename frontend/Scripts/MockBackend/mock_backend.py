@@ -38,6 +38,9 @@ LOG_EVERY_N_DETECTIONS = 100
 QUAD_HALF_WIDTH = 0.12
 QUAD_HALF_HEIGHT = 0.12
 DRIFT_PERIOD_SECONDS = 8.0
+# Max drift of the quad centre from the middle, normalised. Clamped so the quad stays in frame.
+DRIFT_RADIUS_X = 0.32
+DRIFT_RADIUS_Y = 0.32
 BOUNDARY = "frame"
 ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 CARD_SIZE = (500, 700)  # 5:7 trading-card ratio
@@ -129,14 +132,28 @@ def current_colour_index():
 
 
 def current_quad():
-    """Four corners, normalised 0-1, clockwise from top-left. Drifts in a circle."""
+    """Four corners, normalised 0-1, clockwise from top-left. Drifts in a circle.
+
+    QUAD_HALF_WIDTH and QUAD_HALF_HEIGHT are both fractions of the frame height,
+    so equal values give a square in pixels whatever the frame's aspect ratio.
+    """
     phase = (time.monotonic() / DRIFT_PERIOD_SECONDS) * 2 * math.pi
     centre_x = 0.5 + 0.12 * math.cos(phase)
     centre_y = 0.5 + 0.08 * math.sin(phase)
-    left = centre_x - QUAD_HALF_HEIGHT
-    right = centre_x + QUAD_HALF_HEIGHT
-    top = centre_y - QUAD_HALF_HEIGHT
-    bottom = centre_y + QUAD_HALF_HEIGHT
+    # x is normalised by width, so rescale the half width into width units
+    half_width = QUAD_HALF_WIDTH * FRAME_HEIGHT / FRAME_WIDTH
+    half_height = QUAD_HALF_HEIGHT
+    # Shrink both sides by the same factor if either won't fit, keeping the shape
+    fit = min(1.0, 0.5 / half_width, 0.5 / half_height)
+    half_width *= fit
+    half_height *= fit
+    # Only drift as far as the quad can go without leaving the frame
+    centre_x = 0.5 + min(DRIFT_RADIUS_X, 0.5 - half_width) * math.cos(phase)
+    centre_y = 0.5 + min(DRIFT_RADIUS_Y, 0.5 - half_height) * math.sin(phase)
+    left = centre_x - half_width
+    right = centre_x + half_width
+    top = centre_y - half_height
+    bottom = centre_y + half_height
     return [[left, top], [right, top], [right, bottom], [left, bottom]]
 
 
