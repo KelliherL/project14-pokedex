@@ -1,10 +1,17 @@
-"""Pokédex kiosk — COMPX374 Project 14 walking skeleton.
+"""Pokédex kiosk — COMPX374 Project 14.
 
-The OpenCV window here is the DEV HARNESS, not the event UI: it exists so the
-recognition pipeline can be exercised end to end while the real front-end is
-designed. Everything a UI needs arrives as an Identification — that boundary
-is documented in docs/INTERFACES.md.
+Default: starts the real server (capture thread + FastAPI/`uvicorn`) that the
+frontend talks to, per frontend/docs.md's contract (app/server.py,
+app/capture.py). Everything a UI needs arrives as an Identification — that
+boundary is documented in docs/INTERFACES.md.
 
+`--dev-window` instead runs the original `cv2.imshow` visual harness
+(app/dev_harness.py) with no server involved at all — useful for eyeballing
+the recognition pipeline without a frontend running.
+
+Run:    python -m app.main                     (server, from the repo root, venv active)
+        python -m app.main --dev-window         (cv2 debug window instead)
+Server console keys: space = identify + speak · m = switch card/figurine · q = quit
 Run:  python -m app.main             (from the repo root, venv active)
 Keys: space = identify + speak · m = switch card/figurine · q = quit
       b = capture the empty-stand background plate (figurine mode)
@@ -13,8 +20,10 @@ See README.md for what is real vs stubbed.
 """
 
 import argparse
+import os
 import sys
 
+import uvicorn
 import cv2
 
 from app import overlay
@@ -30,43 +39,8 @@ from app.tts import speak
 UNLOCK_AFTER_EMPTY_FRAMES = 10
 PLATE_FRAMES = 12
 
-# The candidate-crop search costs ~99 ms against a few ms for the normal path,
-# so it runs only once the normal path has been failing for a while, and then
-# no more often than every FALLBACK_EVERY frames. At 15 fps that is roughly
-# "after a second of getting nowhere, spend one frame looking harder".
-FALLBACK_AFTER_FRAMES = 12
-FALLBACK_EVERY = 8
-
-
-def lock_from(ident: Identification, matcher: CardMatcher, verifier: CardVerifier,
-              winner: str) -> Identification | None:
-    """Vote converged on `winner`: geometrically verify it against the
-    frame's shortlist. Returns the locked Identification, or None (abstain)."""
-    shortlist = [s["id"] for s in ident.explanation.get("shortlist", [])]
-    if winner not in shortlist:
-        shortlist.insert(0, winner)
-    result = verifier.verify(ident.explanation["rectified"], shortlist)
-    if result.available and not (result.accepted and result.best_id == winner):
-        return None
-    entry = next((e for e in matcher.db if e["id"] == winner), None)
-    if entry is None:
-        return None
-    explanation = {
-        **ident.explanation,
-        "locked": True,
-        "verified": result.available,
-        "verified_inliers": result.inliers,
-        "verified_second": result.second_inliers,
-    }
-    if not result.available:
-        explanation["verify_note"] = "verify skipped — reference images not cached"
-    return Identification(
-        kind="card",
-        label=entry["name"],
-        dex_id=(entry.get("dex_ids") or [None])[0],
-        confidence=max(0.0, 1.0 - ident.explanation["best_distance"] / 32.0),
-        explanation=explanation,
-    )
+from app.capture import CaptureWorker
+from app.server import create_app
 
 
 def figurine_lock(ident: Identification, winner: str) -> Identification | None:
@@ -104,12 +78,19 @@ def build_figurine_recogniser():
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Pokédex kiosk stub")
+    ap = argparse.ArgumentParser(description="Pokédex kiosk")
     ap.add_argument("--camera", type=int, default=0, help="webcam index")
     ap.add_argument("--mode", choices=["card", "figurine"], default="card")
     ap.add_argument("--mute", action="store_true", help="print instead of speaking")
+    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--port", type=int, default=8000)
+    ap.add_argument("--dev-window", action="store_true",
+                     help="run the cv2.imshow visual harness instead of the server")
     args = ap.parse_args()
 
+    if args.dev_window:
+        from app.dev_harness import run
+        return run(args.camera, args.mode, args.mute)
     recognisers = {"card": CardMatcher(), "figurine": build_figurine_recogniser()}
     if not recognisers["card"].db:
         print("note: card DB missing — run scripts/build_card_db.py for real matching")
@@ -117,12 +98,19 @@ def main() -> int:
     if not dex.source.species_ids():
         print("note: dex data missing — run scripts/fetch_dex_data.py for spoken entries")
 
-    backend = cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY
-    cap = cv2.VideoCapture(args.camera, backend)
-    if not cap.isOpened():
-        print(f"error: cannot open camera {args.camera} (try --camera 1)")
+    try:
+        worker = CaptureWorker(args.camera, mode=args.mode, mute=args.mute,
+                                on_quit=lambda: os._exit(0))
+    except RuntimeError as exc:
+        print(f"error: {exc}")
         return 1
 
+    worker.start()
+    app = create_app(worker)
+    try:
+        uvicorn.run(app, host=args.host, port=args.port)
+    finally:
+        worker.stop()
     # Pass card names so reprints of one card cannot become each other's
     # runner-up in the accept rule. Harmless on a single set, necessary the
     # moment the database holds more than one.

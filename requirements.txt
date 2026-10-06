@@ -2,6 +2,8 @@ opencv-python>=4.10
 numpy
 Pillow
 ImageHash
+fastapi
+uvicorn[standard]
 # Figurine lane: frozen DINOv2 embeddings. CPU wheels are enough — the
 # backbone runs once per burst, not per frame, and nothing is trained.
 torch>=2.2
