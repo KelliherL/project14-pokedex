@@ -29,7 +29,10 @@ class FigurineClassifierStub:
             confidence=STUB_TOP5[0][1],
             is_stub=True,
             explanation={
-                "top5": STUB_TOP5,
+                # Same {name, confidence} shape as CardMatcher's top5, so the
+                # frontend renders both recognisers' "what it could be" list
+                # identically regardless of which one ran.
+                "top5": [{"name": name, "confidence": p} for name, p in STUB_TOP5],
                 "note": "STUB — canned output; heatmap panel arrives with the real model",
             },
         )
