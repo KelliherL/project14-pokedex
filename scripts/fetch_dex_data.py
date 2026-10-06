@@ -1,7 +1,11 @@
 """Cache Pokédex entries from PokeAPI into data/dex.json.
 
-Species list = every dex id referenced by data/cards/hashes.json (run
-build_card_db.py first), or a default favourites list if no card DB exists.
+Species list = every dex id the recognisers can actually return: those
+referenced by data/cards/hashes.json (run build_card_db.py first) unioned
+with those in data/figurines/labels.json (run build_figurine_index.py). A
+recogniser that can name a species the dex cannot answer for produces a
+figurine the kiosk identifies correctly and then refuses to talk about,
+which is worse than not recognising it.
 
 Cleans the control characters PokeAPI flavor text is known to contain
 (page-break \\x0c, soft hyphens, embedded newlines) so text is TTS-safe.
@@ -17,6 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HASHES = ROOT / "data" / "cards" / "hashes.json"
+FIGURINES = ROOT / "data" / "figurines" / "labels.json"
 OUT = ROOT / "data" / "dex.json"
 HEADERS = {"User-Agent": "compx374-pokedex-stub (university outreach project)"}
 
@@ -42,13 +47,24 @@ def clean(text: str) -> str:
 
 
 def main() -> None:
+    wanted: set[int] = set()
     if HASHES.exists():
         cards = json.loads(HASHES.read_text(encoding="utf-8"))["cards"]
-        ids = sorted({d for c in cards for d in c["dex_ids"]})
-        print(f"{len(ids)} species referenced by the card DB")
-    else:
-        ids = DEFAULT_IDS
-        print("no card DB found — using default favourites list")
+        from_cards = {d for c in cards for d in c["dex_ids"]}
+        wanted |= from_cards
+        print(f"{len(from_cards)} species referenced by the card DB")
+    if FIGURINES.exists():
+        from_figurines = {e["dex_id"] for e in
+                          json.loads(FIGURINES.read_text(encoding="utf-8")).values()}
+        new = from_figurines - wanted
+        wanted |= from_figurines
+        print(f"{len(from_figurines)} species referenced by the figurine index "
+              f"({len(new)} not already covered)")
+    if not wanted:
+        wanted = set(DEFAULT_IDS)
+        print("no recogniser data found — using default favourites list")
+    ids = sorted(wanted)
+    print(f"{len(ids)} species to fetch")
 
     species = []
     for i in ids:

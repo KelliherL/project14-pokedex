@@ -18,9 +18,17 @@ jobs:
       # opencv-python (not -headless) needs libGL even for import
       - run: sudo apt-get update && sudo apt-get install -y libgl1 libglib2.0-0
 
+      # CPU wheels explicitly: the default index serves the CUDA build of
+      # torch (~2 GB) which CI has no use for. Installing it first satisfies
+      # the requirement before the main install resolves it.
+      - run: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
       - run: pip install -r requirements.txt -r requirements-dev.txt
 
       - run: ruff check .
+
+      - name: Repo weight guard
+        run: python scripts/check_repo_weight.py --all
 
       - run: pytest
 
@@ -48,5 +56,7 @@ jobs:
             echo "cache hit: $count images"
           fi
 
+      # The figurine gates run against the committed index with the embedder
+      # stubbed, so they need no DINOv2 weights download and no network.
       - name: Headless end-to-end selftest
         run: python scripts/selftest.py
