@@ -28,7 +28,7 @@ The full loop — identify → explain → speak — runs end to end today:
 | Piece | State |
 |---|---|
 | Card recognition | **Real.** Contour detect → aspect-aware rectify → pHash+dHash → calibrated nearest-neighbour against a locally cached TCGdex set (Base Set) → 6-of-10 temporal vote → ORB+RANSAC geometric verify at lock-on, with live explanation overlay. |
-| Figurine recognition | **Labelled stub** (canned top-5). Replaced by the spike-(b) winner — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). |
+| Figurine recognition | **Real.** Background-plate crop → frozen DINOv2 embedding → cosine kNN over turntable captures of nine 3D-printed figurines → burst-of-10 vote → margin accept gate, with exemplar-strip explanation. Identifies all nine and refuses everything else (all 70 card photos rejected). Two limits stated up front: it recognises **those specific figurines, not species**, and every accuracy number is **same-session** — see [the figurine lane note](docs/research/2026-09-15-figurine-lane-measured.md). |
 | Dex data | Real subset (69 species via PokeAPI), served through the database-agnostic `DexDataSource` seam. |
 | Speech | Stub-grade (Windows built-in voice, offline). Pre-generated Piper WAVs later. |
 | UI | OpenCV **dev harness** only — the event UI is deliberately unbuilt. |
@@ -95,6 +95,8 @@ docs/                      all project documentation (see below)
 | [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Branch/PR workflow, CI, style, data rules |
 | [docs/CLIENT-QUESTIONS.md](docs/CLIENT-QUESTIONS.md) | First client meeting — for the spokesperson |
 | [docs/research/](docs/research/) | The evidence base behind every claim above |
+| [docs/research/2026-08-07-measured-baselines.md](docs/research/2026-08-07-measured-baselines.md) | **Headline evidence** — the approach measured on our own hardware |
+| [docs/research/2026-09-15-figurine-lane-measured.md](docs/research/2026-09-15-figurine-lane-measured.md) | The figurine recogniser, built and measured on real figurines |
 
 Everything is **preliminary until the first client meeting** — the docs exist
 so the meeting and the team discussion react to something concrete rather
@@ -115,9 +117,13 @@ than to the abstract.
 1. Client meeting #1 — [the questions](docs/CLIENT-QUESTIONS.md); the three
    big asks are venue internet, early access to the exact figurines/cards,
    and privacy/IP sign-off owners.
-2. Spike (a): card pipeline on real cards + our webcam (the harness is this
-   repo).
-3. Spike (b): CLIP-kNN vs fine-tuned ViT on ~5 home-photographed figurines →
-   decides the figurine backend.
-4. Spike (c): live Grad-CAM FPS on our laptops → decides the explainability
-   display budget.
+2. Spike (a′): the card pipeline on **real cards + our webcam** — the
+   synthetic stress validation is done ([measured
+   baselines](docs/research/2026-08-07-measured-baselines.md)); real
+   glare/sleeve/holo footage closes it out.
+3. Spike (b′): the decided figurine backend (DINOv2-kNN, validated on
+   CORe50) versus its control arms on ~5 real figurines, plus the
+   reference-count ablation and the **unknown-rejection hard gate**.
+4. Spike (c′): the explainability displays live — the CAM budget and sanity
+   gate are already measured and passing; what remains is the assembled
+   30-second show and a legibility pilot.
