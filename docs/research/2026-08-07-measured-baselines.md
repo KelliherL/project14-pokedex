@@ -116,6 +116,15 @@ figurine day is data collection, not development.
   90° case, verify acceptance (720 inliers vs 6 on the reference scene),
   and junk rejection (0 inliers).
 
+## Correction (2026-09-15)
+
+The card-lane section below is measured on **synthetic** scenes and reads
+more confidently than real photographs support. Testing on 70 real card
+photos found glare defeats retrieval outright, and surfaced a detector bug
+that synthetic scenes structurally could not: see
+[the real-photo note](2026-09-15-card-lane-real-photos.md). The numbers here
+stand as synthetic results; the conclusions drawn from them do not.
+
 ## What this does NOT yet prove
 
 Synthetic scenes bound the pipeline from the optimistic side. Real webcam

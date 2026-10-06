@@ -30,6 +30,13 @@ from app.tts import speak
 UNLOCK_AFTER_EMPTY_FRAMES = 10
 PLATE_FRAMES = 12
 
+# The candidate-crop search costs ~99 ms against a few ms for the normal path,
+# so it runs only once the normal path has been failing for a while, and then
+# no more often than every FALLBACK_EVERY frames. At 15 fps that is roughly
+# "after a second of getting nowhere, spend one frame looking harder".
+FALLBACK_AFTER_FRAMES = 12
+FALLBACK_EVERY = 8
+
 
 def lock_from(ident: Identification, matcher: CardMatcher, verifier: CardVerifier,
               winner: str) -> Identification | None:
@@ -116,19 +123,38 @@ def main() -> int:
         print(f"error: cannot open camera {args.camera} (try --camera 1)")
         return 1
 
-    verifier = CardVerifier()
+    # Pass card names so reprints of one card cannot become each other's
+    # runner-up in the accept rule. Harmless on a single set, necessary the
+    # moment the database holds more than one.
+    verifier = CardVerifier(
+        names={e["id"]: e["name"] for e in recognisers["card"].db}
+    )
     votes = VoteBuffer()
     burst = BurstGate()
     locked: Identification | None = None
     empty_streak = 0
 
     mode = args.mode
+    hard_streak = 0
+    frame_no = 0
     while True:
         ok, frame = cap.read()
         if not ok:
             print("error: camera read failed")
             break
-        ident = recognisers[mode].identify(frame)
+        frame_no += 1
+
+        # Spend the expensive search only on frames the cheap path has given up
+        # on, and only occasionally. A sleeved card in a stand, or one with a
+        # highlight across its edge, is exactly what this recovers.
+        use_fallback = (mode == "card"
+                        and hard_streak >= FALLBACK_AFTER_FRAMES
+                        and frame_no % FALLBACK_EVERY == 0)
+        if mode == "card":
+            ident = recognisers["card"].identify(frame, allow_fallback=use_fallback)
+            hard_streak = 0 if ident.explanation.get("best_card") else hard_streak + 1
+        else:
+            ident = recognisers[mode].identify(frame)
 
         # Figurine mode runs the same shape: embed per frame -> burst vote ->
         # margin gate at lock-on.
