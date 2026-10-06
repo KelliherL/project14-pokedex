@@ -28,15 +28,13 @@ def test_none_quad_passes_through():
     assert normalise_quad(None, W, H) is None
 
 
-def _ident(kind="card", quad=None, dex_id=None, confidence=0.0, sigma=None, top5=None):
+def _ident(kind="card", quad=None, dex_id=None, top5=None):
     explanation = {}
     if quad is not None:
         explanation["quad"] = quad
-    if sigma is not None:
-        explanation["sigma"] = sigma
     if top5 is not None:
         explanation["top5"] = top5
-    return Identification(kind=kind, dex_id=dex_id, confidence=confidence, explanation=explanation)
+    return Identification(kind=kind, dex_id=dex_id, explanation=explanation)
 
 
 def test_kind_none_has_no_quad_and_is_idle():
@@ -62,17 +60,24 @@ def test_figurine_has_no_quad_key_and_is_always_searching():
     assert msg["top5"] == top5
 
 
-def test_locked_sources_confidence_sigma_dexid_top5_from_lock_but_quad_from_live():
+def test_locked_sources_dexid_and_top5_from_lock_but_quad_from_live():
     live = _ident(kind="card", quad=[[100, 100], [200, 100], [200, 200], [100, 200]])
     top5 = [{"name": "Turtwig", "confidence": 0.9}, {"name": "Chimchar", "confidence": 0.3}]
-    locked = _ident(kind="card", dex_id=387, confidence=0.9, sigma=5.2, top5=top5)
+    locked = _ident(kind="card", dex_id=387, top5=top5)
     msg = build_detection_message(42, W, H, "card", live, locked)
     assert msg["phase"] == "locked"
     assert msg["dexId"] == 387
-    assert msg["confidence"] == 0.9
-    assert msg["sigma"] == 5.2
     assert msg["top5"] == top5
     assert msg["quad"] == normalise_quad(live.explanation["quad"], W, H)
+
+
+def test_message_has_exactly_the_agreed_fields():
+    """Locks in the trimmed contract: confidence/sigma are deliberately not
+    sent -- top5's per-candidate confidence (sigma-scored, not the old
+    saturating distance/32 formula) replaces them."""
+    live = _ident(kind="card", quad=[[0, 0], [10, 0], [10, 10], [0, 10]])
+    msg = build_detection_message(1, W, H, "card", live, None)
+    assert set(msg) == {"type", "frame", "frameSize", "phase", "dexId", "top5", "quad"}
 
 
 def test_no_top5_available_reports_null_not_a_missing_key():

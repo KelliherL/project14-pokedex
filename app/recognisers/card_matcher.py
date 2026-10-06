@@ -288,13 +288,16 @@ class CardMatcher:
                     {"id": self.db[int(i)]["id"], "distance": int(dists[int(i)])}
                     for i in order[:5]
                 ],
-                # Same top-5, reframed as "what it could be": name + the same
-                # confidence formula as the headline `confidence` field, so
-                # the frontend can show a ranked list rather than one guess.
+                # Same top-5, reframed as "what it could be": name + a
+                # confidence scored the same relative way as `sigma` (this
+                # candidate's distance vs. the whole DB's mean/std), not the
+                # distance/32 formula `confidence` uses above — that one
+                # saturates to 0 for every candidate once distances exceed 32,
+                # which real (uncalibrated-for-webcam) frames routinely do.
                 "top5": [
                     {
                         "name": self.db[int(i)]["name"],
-                        "confidence": max(0.0, 1.0 - float(dists[int(i)]) / 32.0),
+                        "confidence": max(0.0, min(1.0, ((mean - float(dists[int(i)])) / std) / 6.0)),
                     }
                     for i in order[:5]
                 ],

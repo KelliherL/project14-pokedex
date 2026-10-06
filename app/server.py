@@ -68,7 +68,12 @@ def create_app(worker: CaptureWorker) -> FastAPI:
                     last_frame_no = snap.frame_no
                     await websocket.send_text(json.dumps(snap.ws_message))
                 await asyncio.sleep(POLL_SECONDS)
-        except WebSocketDisconnect:
+        except (WebSocketDisconnect, RuntimeError):
+            # This handler only ever pushes (no receive loop to detect a
+            # disconnect cooperatively), so a client closing mid-send can
+            # surface as a RuntimeError ("... after sending 'websocket.close'")
+            # instead of WebSocketDisconnect, depending on timing. Either one
+            # means the same thing here: stop pushing to a dead connection.
             return
 
     return app

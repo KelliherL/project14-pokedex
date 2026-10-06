@@ -50,8 +50,8 @@ def build_detection_message(
     """Build one frame's WS 'detection' message.
 
     `quad` always reflects the CURRENT frame's live detection, independent of
-    `locked` — the lock only freezes label/dexId/confidence/sigma, so the
-    overlay keeps tracking the card after lock-on instead of freezing with it.
+    `locked` — the lock only freezes dexId/top5, so the overlay keeps
+    tracking the card after lock-on instead of freezing with it.
     """
     sticky = locked if locked is not None else live
     return {
@@ -60,8 +60,6 @@ def build_detection_message(
         "frameSize": [width, height],
         "phase": _phase(mode, live, locked),
         "dexId": sticky.dex_id,
-        "confidence": sticky.confidence,
-        "sigma": sticky.explanation.get("sigma"),
         "top5": sticky.explanation.get("top5"),
         "quad": normalise_quad(live.explanation.get("quad"), width, height),
     }
