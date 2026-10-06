@@ -52,6 +52,27 @@ ASPECT_MIN, ASPECT_MAX = 0.55, 0.90
 MAX_AREA_FRAC = 0.60
 
 
+def _pack(db: list[dict]) -> tuple[np.ndarray, np.ndarray]:
+    """Stack the DB's hashes into (cards, orientations, 64) bit matrices.
+
+    Comparing ImageHash objects one at a time is a Python loop over the whole
+    database, which costs ~8 ms per lookup at 1764 cards. XOR-ing packed bit
+    matrices is one numpy operation and measures at ~0.2 ms for bit-identical
+    results. At the single lookup per frame the shipped lane does today that
+    is merely tidy; it matters because the candidate-crop search scores a
+    hundred-odd crops per frame, where the constant factor decides whether
+    the approach is affordable at all.
+    """
+    if not db:
+        empty = np.zeros((0, 0, 64), dtype=bool)
+        return empty, empty
+    phash = np.array([[np.asarray(h.hash, dtype=bool).reshape(-1) for h in e["phash"]]
+                      for e in db], dtype=bool)
+    dhash = np.array([[np.asarray(h.hash, dtype=bool).reshape(-1) for h in e["dhash"]]
+                      for e in db], dtype=bool)
+    return phash, dhash
+
+
 def order_corners(pts: np.ndarray) -> np.ndarray:
     """(4,2) points in any order -> [top-left, top-right, bottom-right, bottom-left]."""
     s = pts.sum(axis=1)
@@ -159,11 +180,51 @@ class CardMatcher:
                         "dhash": [imagehash.hex_to_hash(h) for h in entry["dhash"]],
                     }
                 )
+        self._phash_bits, self._dhash_bits = _pack(self.db)
 
-    def identify(self, frame: np.ndarray) -> Identification:
+    def _identify_by_search(self, frame: np.ndarray) -> Identification:
+        """Multi-crop candidate search, scored by retrieval."""
+        from .card_fallback import best_crop  # local: card_fallback imports this module
+
+        found = best_crop(frame, self)
+        if found is None:
+            return Identification(kind="none",
+                                  explanation={"reason": "no card-shaped candidate"})
+        ident = self._result(found.quad, found.crop, found.distances)
+        ident.explanation["found_by"] = "candidate search"
+        ident.explanation["candidates_scored"] = found.candidates
+        return ident
+
+    def _distances(self, pil: Image.Image) -> np.ndarray:
+        """Hamming distance from one rectified view to every card in the DB.
+
+        Same arithmetic as comparing ImageHash objects one at a time, done as
+        two array operations instead of a Python loop over the database. See
+        _pack for why that matters.
+        """
+        ph = np.asarray(imagehash.phash(pil).hash, dtype=bool).reshape(-1)
+        dh = np.asarray(imagehash.dhash(pil).hash, dtype=bool).reshape(-1)
+        dp = (self._phash_bits ^ ph).sum(axis=2).min(axis=1)
+        dd = (self._dhash_bits ^ dh).sum(axis=2).min(axis=1)
+        return (dp + dd).astype(np.float64)
+
+    def identify(self, frame: np.ndarray, allow_fallback: bool = False) -> Identification:
+        """Identify the card in `frame`.
+
+        `allow_fallback` enables the multi-crop candidate search in
+        card_fallback, which finds cards the single-threshold detector cannot
+        (glare-broken edges, sleeves, display stands) at roughly 99 ms on a
+        640 px frame. It is off by default because that is far too expensive
+        per frame; the caller turns it on once the cheap path has come back
+        with nothing. See card_fallback for the measurements.
+        """
         quad = detect_card_quad(frame)
+
         if quad is None:
-            return Identification(kind="none", explanation={"reason": "no card-shaped contour"})
+            if not (allow_fallback and self.db):
+                return Identification(kind="none",
+                                      explanation={"reason": "no card-shaped contour"})
+            return self._identify_by_search(frame)
 
         candidates = rectify_candidates(frame, quad)
 
@@ -179,17 +240,25 @@ class CardMatcher:
         # far lower than a squashed/mis-rotated one, so min wins.
         warped, dists = None, None
         for cand in candidates:
-            pil = Image.fromarray(cv2.cvtColor(cand, cv2.COLOR_BGR2RGB))
-            ph, dh = imagehash.phash(pil), imagehash.dhash(pil)
-            d = np.array(
-                [
-                    min(ph - p for p in e["phash"]) + min(dh - d_ for d_ in e["dhash"])
-                    for e in self.db
-                ],
-                dtype=np.float64,
-            )
+            d = self._distances(Image.fromarray(cv2.cvtColor(cand, cv2.COLOR_BGR2RGB)))
             if dists is None or d.min() < dists.min():
                 warped, dists = cand, d
+
+        if allow_fallback and dists.min() > MAX_BEST_DISTANCE:
+            searched = self._identify_by_search(frame)
+            if searched.explanation.get("best_distance", 999) < dists.min():
+                return searched
+
+        return self._result(quad, warped, dists)
+
+    def _result(self, quad: np.ndarray, warped: np.ndarray,
+                dists: np.ndarray) -> Identification:
+        """Build the Identification from a rectified view and its distances.
+
+        Shared by the primary path and the candidate search so both emit the
+        identical payload shape - the frontend contract does not care which
+        found the card.
+        """
         order = np.argsort(dists)
         best, second = int(order[0]), int(order[1])
         margin = float(dists[second] - dists[best])
@@ -205,7 +274,7 @@ class CardMatcher:
             dex_id=(e.get("dex_ids") or [None])[0] if matched else None,
             confidence=max(0.0, 1.0 - float(dists[best]) / 32.0) if matched else 0.0,
             explanation={
-                "quad": quad.tolist(),
+                "quad": np.asarray(quad).tolist(),
                 "rectified": warped,
                 "best_card": e["id"],
                 "best_distance": int(dists[best]),
