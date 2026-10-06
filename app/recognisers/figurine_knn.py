@@ -273,8 +273,12 @@ class FigurineClassifier:
         for label in self.index.classes:
             per_class[label] = float(sims[self.index.labels == label].max())
         top5 = sorted(per_class.items(), key=lambda kv: kv[1], reverse=True)[:5]
+        # Same {name, confidence} shape as CardMatcher/FigurineClassifierStub's
+        # top5, so the frontend renders "what it could be" identically
+        # regardless of which recogniser ran.
         top5_display = [
-            (self.index.meta[label].display if label in self.index.meta else label, round(s, 4))
+            {"name": self.index.meta[label].display if label in self.index.meta else label,
+             "confidence": round(s, 4)}
             for label, s in top5
         ]
 

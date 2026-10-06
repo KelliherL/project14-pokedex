@@ -19,9 +19,10 @@ from app import ws_adapter
 from app.dex import Dex
 from app.recognisers.base import Identification
 from app.recognisers.card_matcher import CardMatcher
+from app.recognisers.figurine_knn import FigurineClassifier
 from app.recognisers.figurine_stub import FigurineClassifierStub
 from app.recognisers.verify import CardVerifier
-from app.recognisers.voting import VoteBuffer
+from app.recognisers.voting import BurstGate, FrameScore, VoteBuffer
 from app.tts import speak
 
 UNLOCK_AFTER_EMPTY_FRAMES = 10
@@ -33,7 +34,45 @@ UNLOCK_AFTER_EMPTY_FRAMES = 10
 FALLBACK_AFTER_FRAMES = 12
 FALLBACK_EVERY = 8
 
+# Frames averaged into the empty-stand background plate (figurine mode's
+# background-subtraction crop), captured on the console 'b' key.
+PLATE_FRAMES = 12
+
 STREAM_JPEG_QUALITY = 80
+
+
+def build_figurine_recogniser():
+    """The real classifier when an index is present, the labelled stub
+    otherwise, so the demo still runs on a machine without one."""
+    try:
+        classifier = FigurineClassifier()
+    except (ImportError, OSError, ValueError) as exc:
+        print(f"note: figurine index unavailable ({exc}) — using the stub")
+        return FigurineClassifierStub()
+    if not classifier.available:
+        print("note: no figurine index — run scripts/build_figurine_index.py; using the stub")
+        return FigurineClassifierStub()
+    print(f"figurine index: {len(classifier.index.classes)} figurines "
+          f"({len(classifier.index.embeddings)} reference frames)")
+    return classifier
+
+
+def figurine_lock(ident: Identification, winner: str) -> Identification | None:
+    """The burst gate accepted `winner`: present it.
+
+    The decision has already been made across ten frames, so this does not
+    re-gate on the single frame in hand. Judging one frame is what used to
+    throw away correct answers: under a new-room lighting shift the vote was
+    right 100% of the time and the per-frame gate accepted only 80%.
+    """
+    if ident.explanation.get("best_answer") != winner:
+        return None
+    return Identification(
+        kind="figurine", label=winner,
+        dex_id=ident.explanation.get("best_dex_id"),
+        confidence=max(0.0, min(1.0, ident.explanation.get("margin", 0.0) / 0.25)),
+        explanation={**ident.explanation, "locked": True},
+    )
 
 
 def lock_from(ident: Identification, matcher: CardMatcher, verifier: CardVerifier,
@@ -94,7 +133,7 @@ class CaptureWorker:
         if not self.cap.isOpened():
             raise RuntimeError(f"cannot open camera {camera} (try --camera 1)")
 
-        self.recognisers = {"card": CardMatcher(), "figurine": FigurineClassifierStub()}
+        self.recognisers = {"card": CardMatcher(), "figurine": build_figurine_recogniser()}
         if not self.recognisers["card"].db:
             print("note: card DB missing — run scripts/build_card_db.py for real matching")
         self.dex = Dex()
@@ -109,11 +148,18 @@ class CaptureWorker:
         self.mute = mute
         self._on_quit = on_quit
         self._votes = VoteBuffer()
+        self._burst = BurstGate()
         self._locked: Identification | None = None
         self._live: Identification | None = None
         self._empty_streak = 0
         self._hard_streak = 0
         self._frame_no = 0
+        # None = not calibrating; a list = accumulating frames for the next
+        # `_run` iterations to average into a background plate. Written from
+        # the key-listener thread, consumed from the capture thread -- the
+        # "start accumulating" flag flip is the only cross-thread write, and
+        # a plain attribute assignment is atomic enough for that under the GIL.
+        self._plate_frames: list | None = None
 
         self._lock = threading.Lock()
         self._snapshot: FrameSnapshot | None = None
@@ -150,6 +196,7 @@ class CaptureWorker:
                 print("error: camera read failed")
                 break
             self._frame_no += 1
+            self._accumulate_plate_frame(frame)
 
             live = self._identify(frame)
             self._live = live
@@ -176,8 +223,12 @@ class CaptureWorker:
         return ident
 
     def _update_lock_state(self, live: Identification) -> None:
-        if self.mode != "card" or not self.recognisers["card"].db:
-            return
+        if self.mode == "figurine":
+            self._update_figurine_lock(live)
+        elif self.mode == "card" and self.recognisers["card"].db:
+            self._update_card_lock(live)
+
+    def _update_card_lock(self, live: Identification) -> None:
         if live.kind == "none":
             self._empty_streak += 1
             if self._empty_streak >= UNLOCK_AFTER_EMPTY_FRAMES:
@@ -205,19 +256,64 @@ class CaptureWorker:
                 self._last_locked_crop_jpeg = buf.tobytes() if ok_jpeg else None
                 self._last_locked_dex_id = locked.dex_id
 
+    def _update_figurine_lock(self, live: Identification) -> None:
+        """Figurine mode runs the same shape as cards: a score per frame,
+        a burst vote, and an accept gate -- just BurstGate/figurine_lock
+        instead of VoteBuffer/lock_from. The stub has no such state machine,
+        so there is nothing to do when it's the active recogniser."""
+        if not isinstance(self.recognisers["figurine"], FigurineClassifier):
+            return
+
+        answer = live.explanation.get("best_answer")
+        score = None if answer is None else FrameScore(
+            answer=answer,
+            similarity=live.explanation.get("best_similarity", 0.0),
+            margin=live.explanation.get("margin", 0.0),
+        )
+        if answer is None:
+            self._empty_streak += 1
+            if self._empty_streak >= UNLOCK_AFTER_EMPTY_FRAMES:
+                self._burst.reset()
+                self._locked = None
+        else:
+            self._empty_streak = 0
+
+        if self._locked is None:
+            winner = self._burst.add(score)
+            if winner:
+                self._locked = figurine_lock(live, winner)
+
+    def _accumulate_plate_frame(self, frame) -> None:
+        if self._plate_frames is None:
+            return
+        self._plate_frames.append(frame)
+        if len(self._plate_frames) >= PLATE_FRAMES:
+            self.recognisers["figurine"].set_background(self._plate_frames)
+            print(f"[capture] background plate captured from {len(self._plate_frames)} frames "
+                  "— remove the figurine before pressing b")
+            self._plate_frames = None
+
+    def capture_background_plate(self) -> None:
+        if not isinstance(self.recognisers["figurine"], FigurineClassifier):
+            print("[capture] no real figurine classifier loaded; nothing to calibrate")
+            return
+        self._plate_frames = []
+        print(f"[capture] capturing background plate over the next {PLATE_FRAMES} frames...")
+
     def switch_mode(self) -> None:
         self.mode = "figurine" if self.mode == "card" else "card"
         self._votes.reset()
+        self._burst.reset()
         self._locked = None
         self._hard_streak = 0
         print(f"[capture] mode -> {self.mode}")
 
     def speak_current(self) -> None:
-        shown = self._locked if (self.mode == "card" and self._locked is not None) else self._live
+        shown = self._locked if self._locked is not None else self._live
         speak(self.dex.line_for(shown), mute=self.mute)
 
     def _listen_keys(self) -> None:
-        """Headless console key listener so m/space/q keep working with no
+        """Headless console key listener so m/space/b/q keep working with no
         cv2 window open. Windows-only (msvcrt); --dev-window is the fallback
         for keyboard control on other platforms."""
         if sys.platform != "win32":
@@ -226,7 +322,8 @@ class CaptureWorker:
             return
         import msvcrt
 
-        print("[capture] keys: space = identify+speak · m = switch card/figurine · q = quit")
+        print("[capture] keys: space = identify+speak · m = switch card/figurine · "
+              "b = capture figurine background plate · q = quit")
         while not self.stop_event.is_set():
             if msvcrt.kbhit():
                 key = msvcrt.getch()
@@ -234,6 +331,8 @@ class CaptureWorker:
                     self.speak_current()
                 elif key in (b"m", b"M"):
                     self.switch_mode()
+                elif key in (b"b", b"B"):
+                    self.capture_background_plate()
                 elif key in (b"q", b"Q"):
                     self.stop_event.set()
                     if self._on_quit is not None:

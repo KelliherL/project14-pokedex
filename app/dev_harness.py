@@ -5,7 +5,9 @@ recognition pipeline without a frontend, kept as an explicit opt-in
 Deliberately single-threaded and separate from app/capture.py's
 CaptureWorker: `cv2.imshow`/`cv2.waitKey` and a `uvicorn` asyncio event loop
 are not meant to share a process, so this path never involves the server at
-all.
+all. The identify -> vote/burst -> lock pipeline is the same one
+CaptureWorker runs; the shared constants/functions are imported from there
+rather than duplicated.
 """
 
 import sys
@@ -13,18 +15,26 @@ import sys
 import cv2
 
 from app import overlay
-from app.capture import FALLBACK_AFTER_FRAMES, FALLBACK_EVERY, UNLOCK_AFTER_EMPTY_FRAMES, lock_from
+from app.capture import (
+    FALLBACK_AFTER_FRAMES,
+    FALLBACK_EVERY,
+    PLATE_FRAMES,
+    UNLOCK_AFTER_EMPTY_FRAMES,
+    build_figurine_recogniser,
+    figurine_lock,
+    lock_from,
+)
 from app.dex import Dex
 from app.recognisers.base import Identification
 from app.recognisers.card_matcher import CardMatcher
-from app.recognisers.figurine_stub import FigurineClassifierStub
+from app.recognisers.figurine_knn import FigurineClassifier
 from app.recognisers.verify import CardVerifier
-from app.recognisers.voting import VoteBuffer
+from app.recognisers.voting import BurstGate, FrameScore, VoteBuffer
 from app.tts import speak
 
 
 def run(camera: int, mode: str, mute: bool) -> int:
-    recognisers = {"card": CardMatcher(), "figurine": FigurineClassifierStub()}
+    recognisers = {"card": CardMatcher(), "figurine": build_figurine_recogniser()}
     if not recognisers["card"].db:
         print("note: card DB missing — run scripts/build_card_db.py for real matching")
     dex = Dex()
@@ -39,6 +49,7 @@ def run(camera: int, mode: str, mute: bool) -> int:
 
     verifier = CardVerifier(names={e["id"]: e["name"] for e in recognisers["card"].db})
     votes = VoteBuffer()
+    burst = BurstGate()
     locked: Identification | None = None
     empty_streak = 0
 
@@ -51,6 +62,8 @@ def run(camera: int, mode: str, mute: bool) -> int:
             break
         frame_no += 1
 
+        # Spend the expensive search only on frames the cheap path has given
+        # up on, and only occasionally.
         use_fallback = (mode == "card"
                         and hard_streak >= FALLBACK_AFTER_FRAMES
                         and frame_no % FALLBACK_EVERY == 0)
@@ -60,6 +73,28 @@ def run(camera: int, mode: str, mute: bool) -> int:
         else:
             ident = recognisers[mode].identify(frame)
 
+        # Figurine mode runs the same shape: embed per frame -> burst vote ->
+        # margin gate at lock-on.
+        if mode == "figurine" and isinstance(recognisers["figurine"], FigurineClassifier):
+            answer = ident.explanation.get("best_answer")
+            score = None if answer is None else FrameScore(
+                answer=answer,
+                similarity=ident.explanation.get("best_similarity", 0.0),
+                margin=ident.explanation.get("margin", 0.0),
+            )
+            if answer is None:
+                empty_streak += 1
+                if empty_streak >= UNLOCK_AFTER_EMPTY_FRAMES:
+                    burst.reset()
+                    locked = None
+            else:
+                empty_streak = 0
+            if locked is None:
+                winner = burst.add(score)
+                if winner:
+                    locked = figurine_lock(ident, winner)
+
+        # Card mode runs the full lane: hash per frame -> vote -> verify once.
         if mode == "card" and recognisers["card"].db:
             if ident.kind == "none":
                 empty_streak += 1
@@ -75,7 +110,7 @@ def run(camera: int, mode: str, mute: bool) -> int:
                         if locked is None:
                             votes.reset()  # verify abstained; keep watching
 
-        shown = locked if (mode == "card" and locked is not None) else ident
+        shown = locked if locked is not None else ident
         frame = overlay.draw(frame, shown, mode)
         cv2.imshow("Pokedex dev harness — COMPX374 P14", frame)
 
@@ -85,8 +120,18 @@ def run(camera: int, mode: str, mute: bool) -> int:
         elif key == ord("m"):
             mode = "figurine" if mode == "card" else "card"
             votes.reset()
+            burst.reset()
             locked = None
             hard_streak = 0
+        elif key == ord("b") and isinstance(recognisers["figurine"], FigurineClassifier):
+            plate = []
+            for _ in range(PLATE_FRAMES):
+                got, f = cap.read()
+                if got:
+                    plate.append(f)
+            recognisers["figurine"].set_background(plate)
+            print(f"background plate captured from {len(plate)} frames "
+                  "— remove the figurine before pressing b")
         elif key == ord(" "):
             speak(dex.line_for(shown), mute=mute)
 
