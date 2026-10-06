@@ -7,6 +7,7 @@ is documented in docs/INTERFACES.md.
 
 Run:  python -m app.main             (from the repo root, venv active)
 Keys: space = identify + speak · m = switch card/figurine · q = quit
+      b = capture the empty-stand background plate (figurine mode)
 
 See README.md for what is real vs stubbed.
 """
@@ -20,12 +21,14 @@ from app import overlay
 from app.dex import Dex
 from app.recognisers.base import Identification
 from app.recognisers.card_matcher import CardMatcher
+from app.recognisers.figurine_knn import FigurineClassifier
 from app.recognisers.figurine_stub import FigurineClassifierStub
 from app.recognisers.verify import CardVerifier
-from app.recognisers.voting import VoteBuffer
+from app.recognisers.voting import BurstGate, FrameScore, VoteBuffer
 from app.tts import speak
 
 UNLOCK_AFTER_EMPTY_FRAMES = 10
+PLATE_FRAMES = 12
 
 # The candidate-crop search costs ~99 ms against a few ms for the normal path,
 # so it runs only once the normal path has been failing for a while, and then
@@ -66,6 +69,40 @@ def lock_from(ident: Identification, matcher: CardMatcher, verifier: CardVerifie
     )
 
 
+def figurine_lock(ident: Identification, winner: str) -> Identification | None:
+    """The burst gate accepted `winner`: present it.
+
+    The decision has already been made across ten frames, so this does not
+    re-gate on the single frame in hand. Judging one frame is what used to
+    throw away correct answers: under a new-room lighting shift the vote was
+    right 100% of the time and the per-frame gate accepted only 80%.
+    """
+    if ident.explanation.get("best_answer") != winner:
+        return None
+    return Identification(
+        kind="figurine", label=winner,
+        dex_id=ident.explanation.get("best_dex_id"),
+        confidence=max(0.0, min(1.0, ident.explanation.get("margin", 0.0) / 0.25)),
+        explanation={**ident.explanation, "locked": True},
+    )
+
+
+def build_figurine_recogniser():
+    """The real classifier when an index is present, the labelled stub
+    otherwise, so the demo still runs on a machine without one."""
+    try:
+        classifier = FigurineClassifier()
+    except (ImportError, OSError, ValueError) as exc:
+        print(f"note: figurine index unavailable ({exc}) — using the stub")
+        return FigurineClassifierStub()
+    if not classifier.available:
+        print("note: no figurine index — run scripts/build_figurine_index.py; using the stub")
+        return FigurineClassifierStub()
+    print(f"figurine index: {len(classifier.index.classes)} figurines "
+          f"({len(classifier.index.embeddings)} reference frames)")
+    return classifier
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Pokédex kiosk stub")
     ap.add_argument("--camera", type=int, default=0, help="webcam index")
@@ -73,7 +110,7 @@ def main() -> int:
     ap.add_argument("--mute", action="store_true", help="print instead of speaking")
     args = ap.parse_args()
 
-    recognisers = {"card": CardMatcher(), "figurine": FigurineClassifierStub()}
+    recognisers = {"card": CardMatcher(), "figurine": build_figurine_recogniser()}
     if not recognisers["card"].db:
         print("note: card DB missing — run scripts/build_card_db.py for real matching")
     dex = Dex()
@@ -93,6 +130,7 @@ def main() -> int:
         names={e["id"]: e["name"] for e in recognisers["card"].db}
     )
     votes = VoteBuffer()
+    burst = BurstGate()
     locked: Identification | None = None
     empty_streak = 0
 
@@ -118,6 +156,27 @@ def main() -> int:
         else:
             ident = recognisers[mode].identify(frame)
 
+        # Figurine mode runs the same shape: embed per frame -> burst vote ->
+        # margin gate at lock-on.
+        if mode == "figurine" and isinstance(recognisers["figurine"], FigurineClassifier):
+            answer = ident.explanation.get("best_answer")
+            score = None if answer is None else FrameScore(
+                answer=answer,
+                similarity=ident.explanation.get("best_similarity", 0.0),
+                margin=ident.explanation.get("margin", 0.0),
+            )
+            if answer is None:
+                empty_streak += 1
+                if empty_streak >= UNLOCK_AFTER_EMPTY_FRAMES:
+                    burst.reset()
+                    locked = None
+            else:
+                empty_streak = 0
+            if locked is None:
+                winner = burst.add(score)
+                if winner:
+                    locked = figurine_lock(ident, winner)
+
         # Card mode runs the full lane: hash per frame -> vote -> verify once.
         if mode == "card" and recognisers["card"].db:
             if ident.kind == "none":
@@ -134,7 +193,7 @@ def main() -> int:
                         if locked is None:
                             votes.reset()  # verify abstained; keep watching
 
-        shown = locked if (mode == "card" and locked is not None) else ident
+        shown = locked if locked is not None else ident
         frame = overlay.draw(frame, shown, mode)
         cv2.imshow("Pokedex dev harness — COMPX374 P14", frame)
 
@@ -144,8 +203,17 @@ def main() -> int:
         elif key == ord("m"):
             mode = "figurine" if mode == "card" else "card"
             votes.reset()
+            burst.reset()
             locked = None
-            hard_streak = 0
+        elif key == ord("b") and isinstance(recognisers["figurine"], FigurineClassifier):
+            plate = []
+            for _ in range(PLATE_FRAMES):
+                got, f = cap.read()
+                if got:
+                    plate.append(f)
+            recognisers["figurine"].set_background(plate)
+            print(f"background plate captured from {len(plate)} frames "
+                  "— remove the figurine before pressing b")
         elif key == ord(" "):
             speak(dex.line_for(shown), mute=args.mute)
 

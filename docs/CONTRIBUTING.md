@@ -71,3 +71,18 @@ revisiting.
   and are committed; rebuild them with the scripts if sources change.
 - No frames from any camera are ever written to disk — that is an event
   privacy commitment (VISION.md), and it starts as a development habit.
+- **Capture assets (video, photo sets) do not go in the repo.** Put them in
+  shared storage and link them from the docs. `Images/` and `Models/` predate
+  this rule and stay as they are — rewriting shared history costs everyone a
+  re-clone for no functional gain — but they are why the rule exists: they add
+  ~437 MB that every clone now pays for, permanently. CI runs
+  `scripts/check_repo_weight.py`, which fails any commit adding a file over
+  2 MB outside the allowlist. (Deliberately not Git LFS: declaring an LFS
+  filter over extensions already committed as plain blobs breaks checkout for
+  anyone without git-lfs installed.)
+- **Derived artifacts stay out of the repo.** Extracted video frames,
+  embeddings caches and experiment outputs are reproducible from their
+  sources, so they belong in a scratch directory, not in git. The exceptions
+  are the small committed artifacts the app needs at runtime:
+  `data/cards/hashes.json`, `data/dex.json`, and `data/figurines/`
+  (index ~335 KB plus exemplar thumbnails), each rebuildable with its script.

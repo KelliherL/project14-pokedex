@@ -386,6 +386,30 @@
    "flavor": "I suspect this Pok\u00e9mon to be the true identity of a dragon written of in ancient texts, which claimed that it razed an entire village with white-hot beams from its maw."
   },
   {
+   "dex_id": 133,
+   "name": "Eevee",
+   "genus": "Evolution Pok\u00e9mon",
+   "flavor": "Harbors the potential to evolve into manifold forms. Within Eevee lies the key to the mysteries of Pok\u00e9mon evolution\u2014I'm certain of it."
+  },
+  {
+   "dex_id": 134,
+   "name": "Vaporeon",
+   "genus": "Bubble Jet Pok\u00e9mon",
+   "flavor": "Tests show that its cells closely resemble water molecules, which perhaps explains its ability to conceal its form while submerged. I believe the origins of mermaid folklore lie with this Pok\u00e9mon."
+  },
+  {
+   "dex_id": 135,
+   "name": "Jolteon",
+   "genus": "Lightning Pok\u00e9mon",
+   "flavor": "Bristles its fur into sharp, needlelike points when enraged. One can hear electricity crackle in its breath when it exhales."
+  },
+  {
+   "dex_id": 136,
+   "name": "Flareon",
+   "genus": "Flame Pok\u00e9mon",
+   "flavor": "Flames burn within a saclike organ inside this Pok\u00e9mon. When Flareon inhales, these flames grow in intensity, reaching a mighty 3,000 degrees Fahrenheit."
+  },
+  {
    "dex_id": 137,
    "name": "Porygon",
    "genus": "Virtual Pok\u00e9mon",
@@ -414,6 +438,12 @@
    "name": "Mewtwo",
    "genus": "Genetic Pok\u00e9mon",
    "flavor": "Its DNA is almost the same as Mew\u2019s. However, its size and disposition are vastly different."
+  },
+  {
+   "dex_id": 906,
+   "name": "Sprigatito",
+   "genus": "Grass Cat Pok\u00e9mon",
+   "flavor": "The sweet scent its body gives off mesmerizes those around it. The scent grows stronger when this Pok\u00e9mon is in the sun."
   }
  ]
 }
