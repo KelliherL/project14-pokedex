@@ -109,7 +109,9 @@ function sourceSize(source) {
 * scores:     top5 from the ws, [{name, confidence}], optional
 * onClose:    called when the user closes the overlay
 * */
-export function playCaptureAnimation(container, {frame, normalised, quad = null, scores = [], onClose}) {
+export function playCaptureAnimation(container, {
+    frame, normalised, quad = null, scores = [], dexId = null, info = null, onClose,
+}) {
     // the animation was written against three r128, which had no colour management
     THREE.ColorManagement.enabled = false;
     const rnd = makeRnd(7);
@@ -128,8 +130,10 @@ export function playCaptureAnimation(container, {frame, normalised, quad = null,
         <div class="cap-controls">
             <button type="button" data-act="replay">Replay</button>
             <button type="button" data-act="skip">Skip animation</button>
+            <button type="button" data-act="info" style="visibility:hidden">Show data</button>
             <button type="button" data-act="close">Close</button>
-        </div>`;
+        </div>
+        <pre class="cap-info" hidden></pre>`;
     container.appendChild(root);
     const flashEl = root.querySelector('.cap-flash');
     const titleEl = root.querySelector('.cap-caption h1');
@@ -545,6 +549,10 @@ export function playCaptureAnimation(container, {frame, normalised, quad = null,
     root.querySelector('[data-act="skip"]').onclick = () => { t = END; playing = false; };
     root.querySelector('[data-act="replay"]').onclick = () => { t = 0; playing = true; };
     root.querySelector('[data-act="close"]').onclick = () => onClose?.();
+    const infoBtn = root.querySelector('[data-act="info"]');
+    const infoEl = root.querySelector('.cap-info');
+    infoEl.textContent = info ? JSON.stringify(info, null, 2) : `No dex data for dexId ${dexId}`;
+    infoBtn.onclick = () => { infoEl.hidden = !infoEl.hidden; };
     const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
     window.addEventListener('keydown', onKey);
 
@@ -556,6 +564,7 @@ export function playCaptureAnimation(container, {frame, normalised, quad = null,
             if (t >= END) { t = END; playing = false; }
         }
         skipBtn.style.visibility = playing ? 'visible' : 'hidden';
+        infoBtn.style.visibility = t >= END ? 'visible' : 'hidden';
         render(t);
         frameId = requestAnimationFrame(loop);
     }

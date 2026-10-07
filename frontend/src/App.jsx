@@ -1,11 +1,11 @@
 import './App.css';
 import {useEffect, useRef, useState} from 'react';
 import CaptureAnimation from './capture/CaptureAnimation.jsx';
-import {fetchNormalised, grabFrame} from './capture/captureFrame';
+import {fetchNormalised, getPokemonInfo, grabFrame} from './capture/captureFrame';
 
 const STREAM_URL = 'http://localhost:8000/stream';
 const NORMALISED_IMG_URL = 'http://localhost:8000/normalised'
-const DEX_INFO_URL = 'http://localhost:8000/pokemon/'
+const DEX_INFO_URL = 'http://localhost:8000/Pokemon/'
 const WS_URL = 'ws://localhost:8000/ws';
 const RECONNECT_DELAY_MS = 1000;
 
@@ -62,7 +62,7 @@ function QuadOverlay({quad, width, height}) {
                className="absolute inset-0 w-full h-full pointer-events-none">
     <polygon points={points}
              fill="none"
-             stroke="#7CFF4F"
+             stroke="#15A3C7"
              strokeWidth="3"
              vectorEffect="non-scaling-stroke"/>
   </svg>);
@@ -115,7 +115,7 @@ function ConfidencePanel({detection}) {
     <div className="mt-4 space-y-1">
       {Array.isArray(topFive) && topFive.map((item, index) => (<p k={index} className="test-xs flex justify-between">
         <span>{item.name}</span>
-        <span className="font-mono">{item.confidence}</span>
+        <span className="font-mono">{(item.confidence * 100).toFixed(2)}%</span>
       </p>))}
     </div>
   </div>);
@@ -135,8 +135,12 @@ async function capturePokemon(imageRef, detection) {
   // Fallback: if there is no normalised image (no lock yet / request failed), use the captured frame
   const normalised = await normalisedRequest;
 
+  // dex entry for whatever the backend locked onto, dumped at the end of the animation
+  const dexId = normalised?.dexId ?? detection?.dexId ?? null;
+  const info = dexId != null ? await getPokemonInfo(DEX_INFO_URL, dexId) : null;
+
   return {
-    frame, normalised: normalised?.image ?? frame, quad: detection?.quad ?? null, scores: detection?.top5 ?? [],
+    dexId, info, frame, normalised: normalised?.image ?? frame, quad: detection?.quad ?? null, scores: detection?.top5 ?? [],
   };
 }
 

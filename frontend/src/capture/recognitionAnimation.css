@@ -55,6 +55,12 @@
 .cap-controls button:hover { border-color: var(--muted); }
 .cap-controls button:focus-visible { outline: 2px solid var(--win); outline-offset: 2px; }
 
+.cap-info {
+    position: absolute; inset: 16px 16px 72px; margin: 0; overflow: auto; z-index: 1;
+    background: #000; color: #0f0; padding: 12px; font: 13px/1.4 monospace; white-space: pre-wrap;
+}
+.cap-info[hidden] { display: none; }
+
 @media (max-aspect-ratio: 9/10) {
     .cap-bars { top: auto; bottom: 72px; left: 16px; right: 16px; width: auto; transform: none; }
 }

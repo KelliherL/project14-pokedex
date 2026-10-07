@@ -44,7 +44,7 @@ function loadImage(src) {
 export async function fetchNormalised(url) {
     try {
         // cache-bust: the crop changes with every lock but the url doesn't
-        const response = await fetch(`${url}?t=${Date.now()}`, {cache: 'no-store'});
+        const response = await fetch(`${url}`, {cache: 'no-store'});
         if (!response.ok) return null;
         const objectUrl = URL.createObjectURL(await response.blob());
         try {
@@ -56,6 +56,24 @@ export async function fetchNormalised(url) {
         }
     } catch (error) {
         console.error('Failed to fetch normalised image.', error);
+        return null;
+    }
+}
+
+export async function getPokemonInfo(url, dexId){
+    try{
+        // strip any trailing slash so we don't request /pokemon//387
+        const response = await fetch(`${url.replace(/\/+$/, '')}/${dexId}`)
+        if (!response.ok) return null;
+        const info = await response.json();
+        if (info.pokemon_id === 0){
+            console.log(`Pokemon ID: ${dexId} not found.`);
+            // TODO handle this error case means we have a Pokemon that is not in the db
+            // maybe they input the data on a seperate screen?
+        }
+        return info;
+    }catch(error){
+        console.error(error);
         return null;
     }
 }
