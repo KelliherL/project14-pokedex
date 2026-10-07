@@ -8,3 +8,4 @@ uvicorn[standard]
 # backbone runs once per burst, not per frame, and nothing is trained.
 torch>=2.2
 torchvision>=0.17
+pymongo

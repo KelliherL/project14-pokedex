@@ -201,12 +201,21 @@ def normalised(fail: bool = False):
     )
 
 
-@app.get("/pokemon/{dex_id}")
-def pokemon(dex_id: int):
-    entry = POKEDEX.get(dex_id)
-    if entry is None:
-        raise HTTPException(status_code=404, detail=f"No Pokemon with dexId {dex_id}")
-    return entry
+@app.get("/Pokemon/{pokemon_id}")
+def read_root(pokemon_id: int):
+    pokemon = pokemonbyid(pokemon_id)
+    if pokemon_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The requested item could not be found."
+        )
+    elif pokemon_id == 0:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="The server failed to execute the request."
+        )
+    else:
+        return pokemon
 
 
 @app.websocket("/ws")
