@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How the Pokédex recognises a Pokémon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --stage:#0e1726; --panel:rgba(20,32,52,.82); --line:#2a3b58;
+  --text:#e9eef7; --muted:#9aabc4; --accent:#ff4d4d; --win:#ffd45a;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+html,body{height:100%;margin:0}
+body{background:var(--stage);color:var(--text);font:16px/1.45 "Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
+#stage{position:relative;width:100%;height:100%}
+canvas{display:block;width:100%;height:100%}
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+#caption{position:absolute;top:16px;left:16px;max-width:min(440px,calc(100% - 32px));background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+#caption h1{font-size:1.25rem;margin:0 0 4px;font-weight:700}
+#caption p{margin:0;color:var(--muted)}
+#steps{display:flex;gap:6px;margin-top:10px}
+#steps span{height:4px;flex:1;border-radius:2px;background:var(--line)}
+#steps span.on{background:var(--text)}
+#bars{position:absolute;right:4%;top:50%;transform:translateY(-50%);width:min(340px,34vw);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;opacity:0}
+#bars h2{font-size:1rem;margin:0 0 10px}
+.row{display:grid;grid-template-columns:88px 1fr 44px;gap:8px;align-items:center;margin:6px 0;font-size:.95rem}
+.track{height:12px;background:#0a1220;border-radius:6px;overflow:hidden}
+.fill{height:100%;width:0;background:var(--muted);border-radius:6px}
+.row.win .fill{background:var(--win)}
+.row.win{font-weight:700}
+.pct{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+#controls{position:absolute;right:16px;bottom:16px;display:flex;gap:8px}
+button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button:focus-visible{outline:2px solid var(--win);outline-offset:2px}
+@media (max-aspect-ratio:9/10){
+  #bars{top:auto;bottom:72px;left:16px;right:16px;width:auto;transform:none}
+}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c"></canvas>
+  <div id="flash"></div>
+  <div id="caption"><h1 id="ct"></h1><p id="cp"></p><div id="steps"></div></div>
+  <div id="bars"><h2>Classifier scores</h2><div id="rows"></div></div>
+  <div id="controls"><button id="replay">Replay</button><button id="skip">Skip animation</button></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
+const ease=x=>{x=clamp(x);return x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2};
+const seg=(t,a,b)=>ease((t-a)/(b-a));
+const lerp=(a,b,k)=>a+(b-a)*k;
+let seed=7;const rnd=()=>{seed|=0;seed=seed+0x6D2B79F5|0;let r=Math.imul(seed^seed>>>15,1|seed);r=r+Math.imul(r^r>>>7,61|r)^r;return((r^r>>>14)>>>0)/4294967296};
+
+// ---------- timeline + captions ----------
+const STEPS=[
+ [0,  "Capture","The camera grabs a single frame."],
+ [2.5,"Locate and crop","A detector finds the Pokémon and crops to it. This box does not come from the classifier."],
+ [5,  "Split into channels","Every pixel is three numbers from 0 to 255. OpenCV stores them as blue, green, red. Taller means brighter."],
+ [9,  "Resize and normalize","Shrink to the model's input size and scale 0–255 down to 0.0–1.0. Still an ordered grid, nothing is scrambled."],
+ [13, "The model","Layers of learned filters (the weights) look for patterns: edges, then curves, then shapes, then parts. Matches combine and pass on; the rest is dropped."],
+ [20.5,"Scores","The last layer gives one score per Pokémon. The highest wins."],
+ [25, "Result","Locate gave us the box. The classifier gave us the name."]
+];
+const END=29;
+const SCORES=[["Sproutle",.91],["Emberpup",.05],["Pebblit",.03],["Other",.01]];
+const stepsEl=document.getElementById('steps');
+STEPS.forEach(()=>stepsEl.appendChild(document.createElement('span')));
+const rowsEl=document.getElementById('rows');
+const fills=SCORES.map(([n],i)=>{const r=document.createElement('div');r.className='row'+(i?'':' win');
+ r.innerHTML=`<span>${n}</span><div class="track"><div class="fill"></div></div><span class="pct">0%</span>`;rowsEl.appendChild(r);
+ return [r.querySelector('.fill'),r.querySelector('.pct')];});
+
+// ---------- three setup ----------
+const canvas=document.getElementById('c');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setClearColor(0x0e1726);
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(45,1,.1,100);
+
+// ---------- source "photo" (original placeholder creature; swap for the real captured frame) ----------
+const IMG=256,src=document.createElement('canvas');src.width=src.height=IMG;
+const g=src.getContext('2d');
+let gr=g.createLinearGradient(0,0,0,IMG);
+gr.addColorStop(0,'#86bff5');gr.addColorStop(.64,'#d4ebff');gr.addColorStop(.64,'#6cbc48');gr.addColorStop(1,'#357f2a');
+g.fillStyle=gr;g.fillRect(0,0,IMG,IMG);
+g.fillStyle='#2f7d2a';g.beginPath();g.ellipse(128,86,14,30,-.5,0,Math.PI*2);g.fill(); // leaf
+g.strokeStyle='#23601f';g.lineWidth=4;g.beginPath();g.moveTo(128,112);g.lineTo(134,92);g.stroke();
+g.fillStyle='#f28c28';g.beginPath();g.ellipse(128,152,58,50,0,0,Math.PI*2);g.fill(); // body
+g.fillStyle='#c96a14';g.beginPath();g.ellipse(100,200,16,8,0,0,Math.PI*2);g.ellipse(156,200,16,8,0,0,Math.PI*2);g.fill(); // feet
+g.fillStyle='#fff';g.beginPath();g.arc(108,142,12,0,Math.PI*2);g.arc(148,142,12,0,Math.PI*2);g.fill();
+g.fillStyle='#1b1b2a';g.beginPath();g.arc(110,144,6,0,Math.PI*2);g.arc(150,144,6,0,Math.PI*2);g.fill();
+g.strokeStyle='#7a3c08';g.lineWidth=3;g.beginPath();g.arc(128,164,10,.2,Math.PI-.2);g.stroke();
+const pixels=g.getImageData(0,0,IMG,IMG).data;
+
+const PHOTO=4,PY=.3;
+const photoMat=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(src),transparent:true});
+const photo=new THREE.Mesh(new THREE.PlaneGeometry(PHOTO,PHOTO),photoMat);photo.position.y=PY;scene.add(photo);
+
+// crop region (pixels) -> world
+const CX0=56,CY0=62,CS=144;
+const cropSize=CS/IMG*PHOTO;
+const cropC=new THREE.Vector3(((CX0+CS/2)/IMG-.5)*PHOTO,(.5-(CY0+CS/2)/IMG)*PHOTO+PY,0);
+
+// detection box (thick frame)
+function frameShape(s,w){const o=new THREE.Shape();const h=s/2+w;o.moveTo(-h,-h);o.lineTo(h,-h);o.lineTo(h,h);o.lineTo(-h,h);
+ const i=new THREE.Path();const k=s/2;i.moveTo(-k,-k);i.lineTo(-k,k);i.lineTo(k,k);i.lineTo(k,-k);o.holes.push(i);return o;}
+const boxMat=new THREE.MeshBasicMaterial({color:0xff4d4d,transparent:true,opacity:0});
+const box=new THREE.Mesh(new THREE.ShapeGeometry(frameShape(cropSize,.05)),boxMat);
+box.position.copy(cropC);box.position.z=.02;scene.add(box);
+
+function textSprite(text,color,w){const c=document.createElement('canvas');c.width=512;c.height=96;const x=c.getContext('2d');
+ x.font='700 44px "Atkinson Hyperlegible",system-ui,sans-serif';x.fillStyle=color;x.textBaseline='middle';x.fillText(text,8,48);
+ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,opacity:0,depthWrite:false}));
+ s.scale.set(w,w*96/512,1);s.center.set(0,.5);scene.add(s);return s;}
+const resultLabel=textSprite('Sproutle 91%','#ff4d4d',2.6);
+resultLabel.position.set(cropC.x-cropSize/2,cropC.y+cropSize/2+.3,.05);
+
+// ---------- channel planes (B,G,R) ----------
+const dotC=document.createElement('canvas');dotC.width=dotC.height=32;
+{const x=dotC.getContext('2d');const rg=x.createRadialGradient(16,16,0,16,16,16);rg.addColorStop(0,'#fff');rg.addColorStop(.6,'rgba(255,255,255,.8)');rg.addColorStop(1,'rgba(255,255,255,0)');x.fillStyle=rg;x.fillRect(0,0,32,32);}
+const dotTex=new THREE.CanvasTexture(dotC);
+const N=40,S=cropSize/2;
+const CHAN=[[0,0,1],[0,1,0],[1,0,0]]; // B, G, R (OpenCV order)
+const vals=[[],[],[]],planes=[];
+for(let k=0;k<3;k++){
+ const pos=new Float32Array(N*N*3),col=new Float32Array(N*N*3);
+ for(let j=0;j<N;j++)for(let i=0;i<N;i++){
+  const idx=j*N+i,px=Math.floor(CX0+(i+.5)/N*CS),py=Math.floor(CY0+(j+.5)/N*CS),p=(py*IMG+px)*4;
+  vals[k][idx]=pixels[p+[2,1,0][k]]/255; // BGR
+  pos[idx*3]=-S+(i+.5)/N*2*S;pos[idx*3+2]=-S+(j+.5)/N*2*S;
+ }
+ const geo=new THREE.BufferGeometry();
+ geo.setAttribute('position',new THREE.BufferAttribute(pos,3));geo.setAttribute('color',new THREE.BufferAttribute(col,3));
+ const mat=new THREE.PointsMaterial({size:.09,map:dotTex,vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:0});
+ const grp=new THREE.Group();grp.add(new THREE.Points(geo,mat));scene.add(grp);
+ planes.push({grp,geo,mat});
+}
+function updatePlanes(hk,desat,drop,op){
+ planes.forEach(({geo,mat},k)=>{
+  const pos=geo.attributes.position.array,col=geo.attributes.color.array,c=CHAN[k];
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){
+   const idx=j*N+i,v=vals[k][idx],keep=(i%2===0&&j%2===0)?1:1-drop;
+   pos[idx*3+1]=v*.5*hk;
+   const grey=v*.42;
+   col[idx*3]=lerp(c[0]*v,grey*.9,desat)*keep;col[idx*3+1]=lerp(c[1]*v,grey,desat)*keep;col[idx*3+2]=lerp(c[2]*v,grey*1.15,desat)*keep;
+  }
+  geo.attributes.position.needsUpdate=true;geo.attributes.color.needsUpdate=true;mat.opacity=op;
+ });
+}
+
+// ---------- sieve tower ----------
+const tower=new THREE.Group();tower.rotation.set(.28,.6,0);scene.add(tower);
+const TH=5,TW=2,Y0=2.9,YBOT=-TH/2;
+const edgeMat=new THREE.LineBasicMaterial({color:0x9aabc4,transparent:true,opacity:0});
+tower.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(TW,TH,TW)),edgeMat));
+const SY=[1.4,.3,-.8,-1.9];
+const LCOL=['#5ad1ff','#7dff9b','#ffd45a','#ff7ad9'];
+const LNAME=['edges','curves','shapes','parts'];
+function sieveTex(L){
+ const c=document.createElement('canvas');c.width=c.height=256;const x=c.getContext('2d');
+ x.strokeStyle='rgba(200,215,240,.25)';x.lineWidth=1;
+ for(let p=0;p<=256;p+=16){x.beginPath();x.moveTo(p,0);x.lineTo(p,256);x.moveTo(0,p);x.lineTo(256,p);x.stroke();}
+ x.strokeStyle=LCOL[L];x.lineWidth=5;x.lineCap='round';
+ for(let a=0;a<4;a++)for(let b=0;b<4;b++){
+  const cx=32+a*64,cy=32+b*64,r=rnd()*Math.PI;x.beginPath();
+  if(L===0){x.moveTo(cx-18*Math.cos(r),cy-18*Math.sin(r));x.lineTo(cx+18*Math.cos(r),cy+18*Math.sin(r));}
+  else if(L===1){x.arc(cx,cy,16,r,r+Math.PI*1.1);}
+  else if(L===2){if((a+b)%2){x.arc(cx,cy,16,0,Math.PI*2);}else{x.moveTo(cx,cy-18);x.lineTo(cx+17,cy+14);x.lineTo(cx-17,cy+14);x.closePath();}}
+  else{if((a+b)%2){x.ellipse(cx,cy,8,18,r,0,Math.PI*2);}else{x.arc(cx,cy,14,0,Math.PI*2);x.moveTo(cx+5,cy);x.arc(cx,cy,5,0,Math.PI*2);}}
+  x.stroke();
+ }
+ return new THREE.CanvasTexture(c);
+}
+const sieves=SY.map((y,L)=>{
+ const m=new THREE.Mesh(new THREE.PlaneGeometry(TW,TW),new THREE.MeshBasicMaterial({map:sieveTex(L),transparent:true,opacity:0,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,depthWrite:false}));
+ m.rotation.x=-Math.PI/2;m.position.y=y;tower.add(m);
+ const lab=textSprite(`Layer ${L+1}: ${LNAME[L]}`,LCOL[L],2.2);
+ return {m,lab};
+});
+const orb=new THREE.Mesh(new THREE.SphereGeometry(.14,20,20),new THREE.MeshBasicMaterial({color:0xffd45a,transparent:true,opacity:0}));
+orb.position.y=YBOT-.35;tower.add(orb);
+
+// particles falling through the sieves
+const M=900,KEEP=.58,parts=[];
+const ppos=new Float32Array(M*3),pcol=new Float32Array(M*3);
+for(let i=0;i<M;i++){let kl=0;while(kl<4&&rnd()<KEEP)kl++;
+ parts.push({x:(rnd()-.5)*1.4,z:(rnd()-.5)*1.4,d:rnd()*2.2,kl,g:.35+rnd()*.4});}
+const pgeo=new THREE.BufferGeometry();
+pgeo.setAttribute('position',new THREE.BufferAttribute(ppos,3));pgeo.setAttribute('color',new THREE.BufferAttribute(pcol,3));
+const pmat=new THREE.PointsMaterial({size:.1,map:dotTex,vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:0});
+tower.add(new THREE.Points(pgeo,pmat));
+const LC=LCOL.map(h=>new THREE.Color(h));
+const SPEED=1.6,PT0=13.2;
+function updateParticles(t){
+ const tl=t-PT0;
+ parts.forEach((p,i)=>{
+  const y=Y0-SPEED*Math.max(0,tl-p.d);
+  let a=1;
+  if(p.kl<4&&y<SY[p.kl])a=1-clamp((SY[p.kl]-y)/.35);
+  if(y<YBOT)a*=1-clamp((YBOT-y)/.5);
+  let passed=0;for(let L=0;L<4;L++)if(y<SY[L]&&L<p.kl)passed=L+1;
+  const f=lerp(1,.15,clamp((Y0-y)/(Y0-YBOT))),out=(p.kl<4&&y<SY[p.kl])?1+(SY[p.kl]-y)*2:1;
+  ppos[i*3]=p.x*f*out;ppos[i*3+1]=Math.max(y,YBOT-.4);ppos[i*3+2]=p.z*f*out;
+  const c=passed?LC[passed-1]:{r:p.g,g:p.g,b:p.g*1.1};
+  pcol[i*3]=c.r*a;pcol[i*3+1]=c.g*a;pcol[i*3+2]=c.b*a;
+ });
+ pgeo.attributes.position.needsUpdate=true;pgeo.attributes.color.needsUpdate=true;
+}
+
+// ---------- layout ----------
+let aspect=1;
+function resize(){
+ const w=canvas.clientWidth,h=canvas.clientHeight;renderer.setSize(w,h,false);
+ aspect=w/h;camera.aspect=aspect;camera.position.set(0,0,Math.max(10,2.7/(.4142*aspect)));camera.updateProjectionMatrix();
+ tower.position.set(aspect>1.3?-2.2:aspect>.9?-1.3:0,-.3,0);
+}
+addEventListener('resize',resize);resize();
+
+// ---------- render at time t ----------
+const tmp=new THREE.Vector3(),topW=new THREE.Vector3(),mid=new THREE.Vector3(0,.2,0);
+let lastStep=-1;
+function render(t){
+ // flash
+ document.getElementById('flash').style.opacity=t<.8?(t<.2?t/.2:clamp(1-(t-.2)/.6)):0;
+ // photo + box
+ photoMat.opacity=t<5?seg(t,0,.6):t<25?1-seg(t,5,5.8):seg(t,25,26);photo.visible=photoMat.opacity>.001;
+ boxMat.opacity=t<25?seg(t,2.5,3.2)*(1-seg(t,5,5.8)):seg(t,25.4,26);
+ const bs=t<25?lerp(1.5,1,seg(t,2.5,3.4)):1;box.scale.set(bs,bs,1);
+ resultLabel.material.opacity=seg(t,26,26.6);
+
+ // planes
+ tower.updateMatrixWorld();topW.copy(tower.localToWorld(tmp.set(0,Y0-.1,0)));
+ const split=seg(t,5.8,7.6),norm=seg(t,9,11.5),move=seg(t,11,12.8);
+ const pOp=seg(t,5,5.8)*(1-seg(t,13,14));
+ planes.forEach(({grp},k)=>{
+  grp.visible=pOp>.001;
+  grp.rotation.x=lerp(lerp(Math.PI/2,.5,split),.28,move);
+  grp.rotation.y=lerp(lerp(0,Math.PI/4,split),.6,move);
+  grp.position.copy(cropC).lerp(mid,split).lerp(topW,move);
+  grp.position.y+=(k-1)*1.25*split*lerp(1,.22,norm);
+  const s=lerp(1,.6,norm);grp.scale.set(s,s,s);
+ });
+ if(pOp>.001)updatePlanes(split*lerp(1,.7,norm),norm,norm,pOp);
+
+ // tower + particles
+ const tA=seg(t,12.3,13.2)*(1-seg(t,24.5,25.3));
+ tower.visible=tA>.001;
+ edgeMat.opacity=tA*.55;
+ sieves.forEach(({m,lab},L)=>{
+  const st=PT0+(Y0-SY[L])/SPEED,bump=clamp(Math.min((t-st)/.3,(st+2.6-t)/.6));
+  m.material.opacity=tA*(.22+.7*bump);
+  lab.material.opacity=tA*(.45+.55*bump);
+  lab.position.copy(tower.localToWorld(tmp.set(0,SY[L],0)));lab.position.x+=aspect>.9?1.6:1.1;
+  lab.scale.set(aspect>.9?2.2:1.5,(aspect>.9?2.2:1.5)*96/512,1);
+ });
+ pmat.opacity=tA;if(tA>.001)updateParticles(t);
+ orb.material.opacity=tA*seg(t,16.5,19);
+
+ // bars
+ document.getElementById('bars').style.opacity=seg(t,20,20.6);
+ const bk=seg(t,20.6,22.6);
+ SCORES.forEach(([,v],i)=>{fills[i][0].style.width=(v*bk*100)+'%';fills[i][1].textContent=Math.round(v*bk*100)+'%';});
+
+ // caption
+ let s=0;STEPS.forEach((st,i)=>{if(t>=st[0])s=i;});
+ if(s!==lastStep){lastStep=s;document.getElementById('ct').textContent=`${s+1}. ${STEPS[s][1]}`;document.getElementById('cp').textContent=STEPS[s][2];
+  [...stepsEl.children].forEach((e,i)=>e.classList.toggle('on',i<=s));}
+ renderer.render(scene,camera);
+}
+
+// ---------- playback ----------
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let t=reduce?END:0,playing=!reduce,prev=performance.now();
+const skipBtn=document.getElementById('skip');
+skipBtn.onclick=()=>{t=END;playing=false;};
+document.getElementById('replay').onclick=()=>{t=0;playing=true;};
+function loop(now){
+ const dt=Math.min(.05,(now-prev)/1000);prev=now;
+ if(playing){t+=dt;if(t>=END){t=END;playing=false;}}
+ skipBtn.style.visibility=playing?'visible':'hidden';
+ render(t);requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

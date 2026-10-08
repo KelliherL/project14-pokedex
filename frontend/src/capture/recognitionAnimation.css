@@ -1,0 +1,66 @@
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap');
+
+/* Full-screen overlay for the "how the Pokédex recognises a Pokémon" animation.
+   Everything is scoped under .cap-stage so it can't leak into the rest of the app. */
+.cap-stage {
+    --stage: #0e1726;
+    --panel: rgba(20, 32, 52, .82);
+    --line: #2a3b58;
+    --text: #e9eef7;
+    --muted: #9aabc4;
+    --accent: #ff4d4d;
+    --win: #ffd45a;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    overflow: hidden;
+    background: var(--stage);
+    color: var(--text);
+    font: 16px/1.45 "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.cap-stage *, .cap-stage *::before, .cap-stage *::after { box-sizing: border-box; }
+.cap-stage canvas { display: block; width: 100%; height: 100%; }
+.cap-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+
+.cap-caption {
+    position: absolute; top: 16px; left: 16px; max-width: min(440px, calc(100% - 32px));
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
+}
+.cap-caption h1 { font-size: 1.25rem; margin: 0 0 4px; font-weight: 700; }
+.cap-caption p { margin: 0; color: var(--muted); }
+.cap-steps { display: flex; gap: 6px; margin-top: 10px; }
+.cap-steps span { height: 4px; flex: 1; border-radius: 2px; background: var(--line); }
+.cap-steps span.on { background: var(--text); }
+
+.cap-bars {
+    position: absolute; right: 4%; top: 50%; transform: translateY(-50%); width: min(340px, 34vw);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; opacity: 0;
+}
+.cap-bars h2 { font-size: 1rem; margin: 0 0 10px; font-weight: 700; }
+.cap-bars .cap-empty { margin: 0; color: var(--muted); }
+.cap-row { display: grid; grid-template-columns: 88px 1fr 44px; gap: 8px; align-items: center; margin: 6px 0; font-size: .95rem; }
+.cap-row > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cap-track { height: 12px; background: #0a1220; border-radius: 6px; overflow: hidden; }
+.cap-fill { height: 100%; width: 0; background: var(--muted); border-radius: 6px; }
+.cap-row.win .cap-fill { background: var(--win); }
+.cap-row.win { font-weight: 700; }
+.cap-pct { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+.cap-controls { position: absolute; right: 16px; bottom: 16px; display: flex; gap: 8px; }
+.cap-controls button {
+    font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 14px; cursor: pointer;
+}
+.cap-controls button:hover { border-color: var(--muted); }
+.cap-controls button:focus-visible { outline: 2px solid var(--win); outline-offset: 2px; }
+
+.cap-info {
+    position: absolute; inset: 16px 16px 72px; margin: 0; overflow: auto; z-index: 1;
+    background: #000; color: #0f0; padding: 12px; font: 13px/1.4 monospace; white-space: pre-wrap;
+}
+.cap-info[hidden] { display: none; }
+
+@media (max-aspect-ratio: 9/10) {
+    .cap-bars { top: auto; bottom: 72px; left: 16px; right: 16px; width: auto; transform: none; }
+}

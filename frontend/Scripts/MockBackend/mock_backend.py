@@ -179,66 +179,75 @@ async def mjpeg_frames():
         raise
 
 
-@app.get("/stream")
-def stream():
-    return StreamingResponse(
-        mjpeg_frames(),
-        media_type=f"multipart/x-mixed-replace; boundary={BOUNDARY}",
-    )
+# @app.get("/stream")
+# def stream():
+#     return StreamingResponse(
+#         mjpeg_frames(),
+#         media_type=f"multipart/x-mixed-replace; boundary={BOUNDARY}",
+#     )
 
 
-@app.get("/normalised")
-def normalised(fail: bool = False):
-    """Stand-in for the recogniser's current lock crop."""
-    if fail:
-        raise HTTPException(status_code=404, detail="No card locked")
-    index = current_colour_index()
-    log("normalised", f"dexId {MOCK_DEX_ID} ({COLOURS[index][0]})")
-    return Response(
-        content=NORMALISED_FRAMES[index],
-        media_type="image/jpeg",
-        headers={"X-Dex-Id": str(MOCK_DEX_ID)},
-    )
+# @app.get("/normalised")
+# def normalised(fail: bool = False):
+#     """Stand-in for the recogniser's current lock crop."""
+#     if fail:
+#         raise HTTPException(status_code=404, detail="No card locked")
+#     index = current_colour_index()
+#     log("normalised", f"dexId {MOCK_DEX_ID} ({COLOURS[index][0]})")
+#     return Response(
+#         content=NORMALISED_FRAMES[index],
+#         media_type="image/jpeg",
+#         headers={"X-Dex-Id": str(MOCK_DEX_ID)},
+#     )
 
 
-@app.get("/pokemon/{dex_id}")
-def pokemon(dex_id: int):
-    entry = POKEDEX.get(dex_id)
-    if entry is None:
-        raise HTTPException(status_code=404, detail=f"No Pokemon with dexId {dex_id}")
-    return entry
+@app.get("/Pokemon/{pokemon_id}")
+def read_root(pokemon_id: int):
+    pokemon = pokemonbyid(pokemon_id)
+    if pokemon_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The requested item could not be found."
+        )
+    elif pokemon_id == 0:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="The server failed to execute the request."
+        )
+    else:
+        return pokemon
 
 
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    log("ws", "client connected")
-    detection_interval = 1 / DETECTION_HZ
-    frame_number = 0
-
-    try:
-        while True:
-            frame_number += 1
-            colour_name = COLOURS[current_colour_index()][0]
-            # TODO colour in this response is for TESTING DATA ONLY, remove when transferring to prod
-            message = {
-                "type": "detection",
-                "frame": frame_number,
-                "phase": "searching",
-                "dexId": MOCK_DEX_ID,
-                "confidence": round(0.5 + 0.4 * math.sin(time.monotonic()), 3),
-                "sigma": round(3.0 + 1.5 * math.sin(time.monotonic() * 0.7), 2),
-                "quad": current_quad(),
-                "colour": colour_name,
-            }
-            await websocket.send_text(json.dumps(message))
-            # Every message would be DETECTION_HZ lines a second of noise.
-            if frame_number % LOG_EVERY_N_DETECTIONS == 1:
-                log("ws", json.dumps(message))
-            await asyncio.sleep(detection_interval)
-    except WebSocketDisconnect:
-        log("ws", f"client disconnected after {frame_number} messages")
-        return
+# @app.websocket("/ws")
+# async def websocket_endpoint(websocket: WebSocket):
+#     await websocket.accept()
+#     log("ws", "client connected")
+#     detection_interval = 1 / DETECTION_HZ
+#     frame_number = 0
+#
+#     try:
+#         while True:
+#             frame_number += 1
+#             colour_name = COLOURS[current_colour_index()][0]
+#             # TODO colour in this response is for TESTING DATA ONLY, remove when transferring to prod
+#             message = {
+#                 "type": "detection",
+#                 "frame": frame_number,
+#                 "phase": "searching",
+#                 "dexId": MOCK_DEX_ID,
+#                 "confidence": round(0.5 + 0.4 * math.sin(time.monotonic()), 3),
+#                 "sigma": round(3.0 + 1.5 * math.sin(time.monotonic() * 0.7), 2),
+#                 "quad": current_quad(),
+#                 "colour": colour_name,
+#             }
+#             await websocket.send_text(json.dumps(message))
+#             # Every message would be DETECTION_HZ lines a second of noise.
+#             if frame_number % LOG_EVERY_N_DETECTIONS == 1:
+#                 log("ws", json.dumps(message))
+#             await asyncio.sleep(detection_interval)
+#     except WebSocketDisconnect:
+#         log("ws", f"client disconnected after {frame_number} messages")
+#         return
 
 
 if __name__ == "__main__":
