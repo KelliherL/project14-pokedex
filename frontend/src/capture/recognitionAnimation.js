@@ -28,15 +28,7 @@ function makeRnd(start) {
 }
 
 // ---------- timeline + captions ----------
-const STEPS = [
-    [0, 'Capture', 'The camera grabs a single frame.'],
-    [2.5, 'Locate and crop', 'A detector finds the Pokémon and crops to it. This box does not come from the classifier.'],
-    [5, 'Split into channels', 'Every pixel is three numbers from 0 to 255. OpenCV stores them as blue, green, red. Taller means brighter.'],
-    [9, 'Resize and normalize', "Shrink to the model's input size and scale 0–255 down to 0.0–1.0. Still an ordered grid, nothing is scrambled."],
-    [13, 'The model', 'Layers of learned filters (the weights) look for patterns: edges, then curves, then shapes, then parts. Matches combine and pass on; the rest is dropped.'],
-    [20.5, 'Scores', 'The last layer gives one score per Pokémon. The highest wins.'],
-    [25, 'Result', 'Out comes the normalised image the classifier worked on, with the name it gave.'],
-];
+const STEPS = [[0, 'Capture', 'The camera grabs a single frame.'], [2.5, 'Locate and crop', 'A detector finds the Pokémon and crops to it. This box does not come from the classifier.'], [5, 'Split into channels', 'Every pixel is three numbers from 0 to 255. OpenCV stores them as blue, green, red. Taller means brighter.'], [9, 'Resize and normalize', "Shrink to the model's input size and scale 0–255 down to 0.0–1.0. Still an ordered grid, nothing is scrambled."], [13, 'The model', 'Layers of learned filters (the weights) look for patterns: edges, then curves, then shapes, then parts. Matches combine and pass on; the rest is dropped.'], [20.5, 'Scores', 'The last layer gives one score per Pokémon. The highest wins.'], [25, 'Result', 'Out comes the normalised image the classifier worked on, with the name it gave.'],];
 const END = 29;
 const MAX_SCORE_ROWS = 4;
 
@@ -82,9 +74,15 @@ function frameShape(w, h, t) {
     const o = new THREE.Shape();
     const ow = w / 2 + t;
     const oh = h / 2 + t;
-    o.moveTo(-ow, -oh); o.lineTo(ow, -oh); o.lineTo(ow, oh); o.lineTo(-ow, oh);
+    o.moveTo(-ow, -oh);
+    o.lineTo(ow, -oh);
+    o.lineTo(ow, oh);
+    o.lineTo(-ow, oh);
     const i = new THREE.Path();
-    i.moveTo(-w / 2, -h / 2); i.lineTo(-w / 2, h / 2); i.lineTo(w / 2, h / 2); i.lineTo(w / 2, -h / 2);
+    i.moveTo(-w / 2, -h / 2);
+    i.lineTo(-w / 2, h / 2);
+    i.lineTo(w / 2, h / 2);
+    i.lineTo(w / 2, -h / 2);
     o.holes.push(i);
     return o;
 }
@@ -193,11 +191,7 @@ export function playCaptureAnimation(container, {
     const crop = cropRect(quad, fw, fh);
     const cropW = (crop.w / fw) * PW;
     const cropH = (crop.h / fh) * PH;
-    const cropC = new THREE.Vector3(
-        ((crop.x + crop.w / 2) / fw - 0.5) * PW,
-        (0.5 - (crop.y + crop.h / 2) / fh) * PH + PY,
-        0,
-    );
+    const cropC = new THREE.Vector3(((crop.x + crop.w / 2) / fw - 0.5) * PW, (0.5 - (crop.y + crop.h / 2) / fh) * PH + PY, 0,);
 
     // detection box (thick frame)
     const boxMat = new THREE.MeshBasicMaterial({color: 0xff4d4d, transparent: true, opacity: 0});
@@ -271,8 +265,13 @@ export function playCaptureAnimation(container, {
         geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
         geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
         const mat = new THREE.PointsMaterial({
-            size: 0.09, map: dotTex, vertexColors: true, transparent: true,
-            blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0,
+            size: 0.09,
+            map: dotTex,
+            vertexColors: true,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            opacity: 0,
         });
         const grp = new THREE.Group();
         grp.add(new THREE.Points(geo, mat));
@@ -318,7 +317,12 @@ export function playCaptureAnimation(container, {
         x.strokeStyle = 'rgba(200,215,240,.25)';
         x.lineWidth = 1;
         for (let p = 0; p <= 256; p += 16) {
-            x.beginPath(); x.moveTo(p, 0); x.lineTo(p, 256); x.moveTo(0, p); x.lineTo(256, p); x.stroke();
+            x.beginPath();
+            x.moveTo(p, 0);
+            x.lineTo(p, 256);
+            x.moveTo(0, p);
+            x.lineTo(256, p);
+            x.stroke();
         }
         x.strokeStyle = LCOL[L];
         x.lineWidth = 5;
@@ -338,12 +342,17 @@ export function playCaptureAnimation(container, {
                     if ((a + b) % 2) {
                         x.arc(cx, cy, 16, 0, Math.PI * 2);
                     } else {
-                        x.moveTo(cx, cy - 18); x.lineTo(cx + 17, cy + 14); x.lineTo(cx - 17, cy + 14); x.closePath();
+                        x.moveTo(cx, cy - 18);
+                        x.lineTo(cx + 17, cy + 14);
+                        x.lineTo(cx - 17, cy + 14);
+                        x.closePath();
                     }
                 } else if ((a + b) % 2) {
                     x.ellipse(cx, cy, 8, 18, r, 0, Math.PI * 2);
                 } else {
-                    x.arc(cx, cy, 14, 0, Math.PI * 2); x.moveTo(cx + 5, cy); x.arc(cx, cy, 5, 0, Math.PI * 2);
+                    x.arc(cx, cy, 14, 0, Math.PI * 2);
+                    x.moveTo(cx + 5, cy);
+                    x.arc(cx, cy, 5, 0, Math.PI * 2);
                 }
                 x.stroke();
             }
@@ -353,8 +362,12 @@ export function playCaptureAnimation(container, {
 
     const sieves = SY.map((y, L) => {
         const m = new THREE.Mesh(new THREE.PlaneGeometry(TW, TW), new THREE.MeshBasicMaterial({
-            map: sieveTex(L), transparent: true, opacity: 0, side: THREE.DoubleSide,
-            blending: THREE.AdditiveBlending, depthWrite: false,
+            map: sieveTex(L),
+            transparent: true,
+            opacity: 0,
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
         }));
         m.rotation.x = -Math.PI / 2;
         m.position.y = y;
@@ -362,10 +375,11 @@ export function playCaptureAnimation(container, {
         const lab = textSprite(`Layer ${L + 1}: ${LNAME[L]}`, LCOL[L], 2.2);
         return {m, lab};
     });
-    const orb = new THREE.Mesh(
-        new THREE.SphereGeometry(0.14, 20, 20),
-        new THREE.MeshBasicMaterial({color: 0xffd45a, transparent: true, opacity: 0}),
-    );
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.14, 20, 20), new THREE.MeshBasicMaterial({
+        color: 0xffd45a,
+        transparent: true,
+        opacity: 0
+    }),);
     orb.position.y = YBOT - 0.35;
     tower.add(orb);
 
@@ -382,8 +396,13 @@ export function playCaptureAnimation(container, {
     pgeo.setAttribute('position', new THREE.BufferAttribute(ppos, 3));
     pgeo.setAttribute('color', new THREE.BufferAttribute(pcol, 3));
     const pmat = new THREE.PointsMaterial({
-        size: 0.1, map: dotTex, vertexColors: true, transparent: true,
-        blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0,
+        size: 0.1,
+        map: dotTex,
+        vertexColors: true,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        opacity: 0,
     });
     tower.add(new THREE.Points(pgeo, pmat));
     const LC = LCOL.map((h) => new THREE.Color(h));
@@ -428,6 +447,7 @@ export function playCaptureAnimation(container, {
 
     // ---------- layout ----------
     let aspect = 1;
+
     function resize() {
         const w = canvas.clientWidth;
         const h = canvas.clientHeight;
@@ -440,6 +460,7 @@ export function playCaptureAnimation(container, {
         // eslint-disable-next-line no-nested-ternary
         tower.position.set(aspect > 1.3 ? -2.2 : aspect > 0.9 ? -1.3 : 0, -0.3, 0);
     }
+
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(canvas);
     resize();
@@ -529,7 +550,9 @@ export function playCaptureAnimation(container, {
 
         // caption
         let s = 0;
-        STEPS.forEach((st, i) => { if (t >= st[0]) s = i; });
+        STEPS.forEach((st, i) => {
+            if (t >= st[0]) s = i;
+        });
         if (s !== lastStep) {
             lastStep = s;
             titleEl.textContent = `${s + 1}. ${STEPS[s][1]}`;
@@ -546,14 +569,24 @@ export function playCaptureAnimation(container, {
     let prev = performance.now();
     let frameId = 0;
 
-    root.querySelector('[data-act="skip"]').onclick = () => { t = END; playing = false; };
-    root.querySelector('[data-act="replay"]').onclick = () => { t = 0; playing = true; };
+    root.querySelector('[data-act="skip"]').onclick = () => {
+        t = END;
+        playing = false;
+    };
+    root.querySelector('[data-act="replay"]').onclick = () => {
+        t = 0;
+        playing = true;
+    };
     root.querySelector('[data-act="close"]').onclick = () => onClose?.();
     const infoBtn = root.querySelector('[data-act="info"]');
     const infoEl = root.querySelector('.cap-info');
     infoEl.textContent = info ? JSON.stringify(info, null, 2) : `No dex data for dexId ${dexId}`;
-    infoBtn.onclick = () => { infoEl.hidden = !infoEl.hidden; };
-    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    infoBtn.onclick = () => {
+        infoEl.hidden = !infoEl.hidden;
+    };
+    const onKey = (e) => {
+        if (e.key === 'Escape') onClose?.();
+    };
     window.addEventListener('keydown', onKey);
 
     function loop(now) {
@@ -561,13 +594,17 @@ export function playCaptureAnimation(container, {
         prev = now;
         if (playing) {
             t += dt;
-            if (t >= END) { t = END; playing = false; }
+            if (t >= END) {
+                t = END;
+                playing = false;
+            }
         }
         skipBtn.style.visibility = playing ? 'visible' : 'hidden';
         infoBtn.style.visibility = t >= END ? 'visible' : 'hidden';
         render(t);
         frameId = requestAnimationFrame(loop);
     }
+
     frameId = requestAnimationFrame(loop);
 
     return function dispose() {
