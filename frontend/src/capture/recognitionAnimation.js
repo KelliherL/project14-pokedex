@@ -16,6 +16,11 @@ const ease = (x) => {
 const seg = (t, a, b) => ease((t - a) / (b - a));
 const lerp = (a, b, k) => a + (b - a) * k;
 
+// debug overlay: time/frame counter drawn over everything, plus Space to pause and
+// Left/Right to step one frame (Shift for one second) so a moment can be screenshotted
+const DEBUG = true;
+const DEBUG_FPS = 60; // playback is time-based; the frame number is just t at this nominal rate
+
 // seeded so the sieve patterns and particles look the same every run
 function makeRnd(start) {
     let seed = start;
@@ -131,8 +136,10 @@ export function playCaptureAnimation(container, {
             <button type="button" data-act="info" style="visibility:hidden">Show data</button>
             <button type="button" data-act="close">Close</button>
         </div>
-        <pre class="cap-info" hidden></pre>`;
+        <pre class="cap-info" hidden></pre>
+        ${DEBUG ? '<div class="cap-debug"></div>' : ''}`;
     container.appendChild(root);
+    const debugEl = root.querySelector('.cap-debug');
     const flashEl = root.querySelector('.cap-flash');
     const titleEl = root.querySelector('.cap-caption h1');
     const textEl = root.querySelector('.cap-caption p');
@@ -586,6 +593,17 @@ export function playCaptureAnimation(container, {
     };
     const onKey = (e) => {
         if (e.key === 'Escape') onClose?.();
+        if (!DEBUG) return;
+        if (e.key === ' ') {
+            e.preventDefault();
+            if (t >= END) t = 0;
+            playing = !playing;
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            const step = e.shiftKey ? 1 : 1 / DEBUG_FPS;
+            t = clamp(t + (e.key === 'ArrowRight' ? step : -step), 0, END);
+            playing = false;
+        }
     };
     window.addEventListener('keydown', onKey);
 
@@ -602,6 +620,10 @@ export function playCaptureAnimation(container, {
         skipBtn.style.visibility = playing ? 'visible' : 'hidden';
         infoBtn.style.visibility = t >= END ? 'visible' : 'hidden';
         render(t);
+        if (debugEl) {
+            const frameNo = Math.round(t * DEBUG_FPS);
+            debugEl.textContent = `frame ${frameNo}  t ${t.toFixed(2)}s  step ${lastStep + 1}${playing ? '' : '  paused'}`;
+        }
         frameId = requestAnimationFrame(loop);
     }
 
