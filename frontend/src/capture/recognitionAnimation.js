@@ -4,8 +4,10 @@
 * normalised crop from the backend.
 *
 * The model step is told as a conveyor belt: the picture rides past little workers who each
-* mark one kind of pattern on it (edges, curves, shapes, parts), then the parts vote. It's a
-* teaching picture of a generic convolutional classifier, not of the Pokédex's own recognisers.
+* mark one kind of pattern on it (edges, curves, shapes), then at the last station each worker
+* stands for one of the top guesses and marks the parts that point to it, and the foreman counts
+* those up. It's a teaching picture of a generic convolutional classifier, not of the Pokédex's
+* own recognisers.
 *
 * playCaptureAnimation(container, options) mounts it and returns a dispose function.
 * */
@@ -19,6 +21,7 @@ const ease = (x) => {
 };
 const seg = (t, a, b) => ease((t - a) / (b - a));
 const lerp = (a, b, k) => a + (b - a) * k;
+const bump = (t, a, len) => clamp(1 - Math.abs((t - a) / len - 0.5) * 2); // 0 -> 1 -> 0 over [a, a+len]
 
 // debug overlay: time/frame counter drawn over everything, plus Space to pause and
 // Left/Right to step one frame (Shift for one second) so a moment can be screenshotted
@@ -26,32 +29,54 @@ const DEBUG = true;
 const DEBUG_FPS = 60; // playback is time-based; the frame number is just t at this nominal rate
 
 // ---------- timeline ----------
-// The sheet lands on the belt at LAND, then travels to each station and waits there while the
-// workers mark it. Everything after the belt is timed off these so the stations can be retimed.
-const LAND = 13.6;
-const TRAVEL = 0.7;
-const WORK = 1.4;
-const STATION_X = [-1.9, -0.5, 0.9, 2.3];
+// Every phase is either a transformation (the data visibly changes) or a gap (waiting, or the
+// camera moving). The base durations below are scaled by these two, so pacing is tuned here.
+const XF_SCALE = 1.4;
+const GAP_SCALE = 0.75;
+const xf = (s) => s * XF_SCALE;
+const gap = (s) => s * GAP_SCALE;
+
+const CAM_IN = [0, xf(0.4)]; // the instant camera pops in
+const SHUTTER = CAM_IN[1] + xf(0.15);
+const EJECT = [SHUTTER + xf(0.3), SHUTTER + xf(1.3)]; // the photo slides out of the slot, face down
+const FLIP = [EJECT[1], EJECT[1] + xf(1.2)]; // camera fades, photo flips over into place
+const CROP = [FLIP[1] + gap(1.9), FLIP[1] + gap(1.9) + xf(0.9)];
+const CHAN_T = CROP[1] + gap(1.6); // photo hands over to the channel planes
+const SPLIT = [CHAN_T + xf(0.8), CHAN_T + xf(2.6)];
+const NORM = [SPLIT[1] + gap(1.4), SPLIT[1] + gap(1.4) + xf(2.5)];
+const MERGE = [NORM[1], NORM[1] + xf(1.4)]; // the three planes slide back into one picture
+const DROP = [MERGE[1], MERGE[1] + gap(2)]; // camera and picture drop down to the belt
+const LAND = DROP[1];
+
+// The belt never stops: it crawls past each station while the workers mark the sheet, and
+// rushes between stations.
+const TRAVEL = gap(2); // raising this slows down the jump between steps
+const WORK = xf(1.4);
+const CRAWL = 0.35; // how far the sheet creeps while a station works on it
+const STATION_X = [-4.8, -1.6, 1.6, 4.8];
 const STOPS = STATION_X.map((x, i) => {
     const arrive = LAND + TRAVEL + i * (TRAVEL + WORK);
     return {x, arrive, leave: arrive + WORK};
 });
 const DESK_T = STOPS[3].leave + TRAVEL; // sheet reaches the foreman
-const VOTE_END = DESK_T + 1.2;
-const SCORES_T = VOTE_END + 1.1;
-const RESULT_T = SCORES_T + 3.5;
-const END = RESULT_T + 4;
+const COUNT = [DESK_T + 0.3, DESK_T + 0.3 + xf(1.8)]; // votes fly into the clipboard
+const VOTE_END = COUNT[1] + 2; // time to read the foreman's last line
+const RETURN = [VOTE_END, VOTE_END + gap(1.4)]; // camera rises back to the front view
+const SCORES_T = RETURN[1] - gap(0.3);
+const RESULT_T = SCORES_T + xf(0.6) + xf(2) + gap(1.4);
+const END = RESULT_T + xf(1.6) + 1.5;
 
 const STEPS = [
     [0, 'Capture', 'The camera grabs a single frame.'],
-    [2.5, 'Locate and crop', 'A detector finds the Pokémon and crops to it. This box does not come from the classifier.'],
-    [5, 'Split into channels', 'Every pixel is three numbers from 0 to 255. OpenCV stores them as blue, green, red. Taller means brighter.'],
-    [9, 'Resize and normalize', "Shrink to the model's input size and scale 0–255 down to 0.0–1.0. Still an ordered grid, nothing is scrambled."],
-    [13, 'The model', 'The picture rides past workers who each spot one small pattern and mark it wherever it appears. Nobody programmed them: they learned by practising on thousands of labelled photos.'],
-    [STOPS[1].arrive, 'Building on the marks', 'Each station only sees the marks made before it. Edges join into curves, curves into shapes, shapes into parts. We named the stations; the model has no names for them.'],
-    [DESK_T, 'The vote', 'The parts that were found are counted up as votes for each Pokémon.'],
+    [CROP[0], 'Locate and crop', 'A detector finds the Pokémon and crops to it. This box does not come from the classifier.'],
+    [CHAN_T, 'Split into channels', 'Every pixel is three numbers from 0 to 255. OpenCV stores them as blue, green, red. Taller means brighter.'],
+    [NORM[0], 'Resize and normalize', "Shrink to the model's input size and scale 0–255 down to 0.0–1.0. Still an ordered grid, nothing is scrambled."],
+    [MERGE[0], 'The model', 'The picture rides past workers who each spot one small pattern and mark it wherever it appears. Nobody programmed them: they learned by practising on thousands of labelled photos.'],
+    [STOPS[1].arrive, 'Building on the marks', 'Each station only sees the marks made before it. Edges join into curves, curves into shapes. We named the stations; the model has no names for them.'],
+    [STOPS[3].arrive, 'Parts point to answers', 'At the last station each worker stands for one possible answer and marks the parts that point to it. The more they find, the higher that answer scores.'],
+    [DESK_T, 'The vote', 'The marks are counted up as votes for each Pokémon.'],
     [SCORES_T, 'Scores', 'The last layer gives one score per Pokémon. The highest wins.'],
-    [RESULT_T, 'Result', 'Out comes the normalised image the classifier worked on, with the name it gave.'],
+    [RESULT_T - xf(0.4), 'Result', 'Out comes the normalised image the classifier worked on, with the name it gave.'],
 ];
 const MAX_SCORE_ROWS = 4;
 
@@ -63,26 +88,37 @@ const GRID = 40; // channel grid resolution along a square crop
 const CHAN = [[0, 0, 1], [0, 1, 0], [1, 0, 0]]; // B, G, R (OpenCV order)
 const LCOL = ['#5ad1ff', '#7dff9b', '#ffd45a', '#ff7ad9'];
 const LNAME = ['edges', 'curves', 'shapes', 'parts'];
+// one per top guess, winner first; the score bars use the same colours
+const GUESS_COL = ['#ff5a5a', '#ff9f1c', '#b78cff', '#3fe0c5'];
+const PART_MARKS = 8; // parts shared out between the guesses by score
 const CARD = 3.4; // longest side of the final normalised image
+
+// the instant camera at the start
+const CAMW = 2.6;
+const CAMH = 1.95;
+const CAM_Y = PY + 1;
+const EJECT_W = CAMW * 0.6; // photo width while it comes out of the slot
 
 // the conveyor stage sits well below the photo, and the camera drops down to it
 const FLOOR = -9;
-const BELT_H = 0.5;
+const BELT_H = 0.7;
 const BELT_TOP = FLOOR + BELT_H;
 const BELT_W = 1.7;
-const BELT_X0 = -4.4;
-const BELT_X1 = 4.6;
-const START_X = -3.4;
-const DESK_X = 3.8;
+const BELT_X0 = -9;
+const BELT_X1 = 9.2;
+const START_X = -7.6;
+const DESK_X = 7.6;
 const STRIPE = 0.35; // spacing of the belt's slats
 const SHEET_SCALES = [0.62, 0.56, 0.5, 0.44]; // the sheet shrinks at each station, like a network's maps
 const STROKE_W = [5, 6, 8, 10]; // marks get bolder as they get fewer
-// belt camera: looking down ~35 degrees through a narrow lens, so it reads as near-orthographic
+// belt camera: looking down ~35 degrees, turned so the belt comes towards us from the top left,
+// through a narrow lens so it reads as near-orthographic
 const CAM_EL = 0.6;
-const CAM_YAW = -0.3;
+const CAM_YAW = 0.75;
 const CAM_FOV = 12;
 
 // ---------- worker look ----------
+const WORKER_SCALE = 1.9;
 const SKIN = ['#e3b08a', '#c98f62', '#8f5d3e', '#f2cfae'];
 const SHIRT = ['#ffb03b', '#f4d03f', '#ff8a5c'];
 const OVERALLS = ['#3e6ad6', '#2b9a8c', '#6a5acd'];
@@ -160,6 +196,37 @@ function disc(x, cx, cy, r, color) {
     x.beginPath();
     x.arc(cx, cy, r, 0, Math.PI * 2);
     x.fill();
+}
+
+// a simple line-drawn instant camera, after the reference but with less going on
+function drawInstantCamera(x, w, h) {
+    x.lineWidth = 10;
+    x.lineJoin = 'round';
+    x.strokeStyle = '#2b2b2b';
+    x.fillStyle = '#c0392b';
+    x.fillRect(w - 130, 14, 56, 30); // shutter button
+    x.strokeRect(w - 130, 14, 56, 30);
+    x.fillStyle = '#f4f1ea';
+    x.beginPath();
+    x.roundRect(16, 40, w - 32, h - 56, 36);
+    x.fill();
+    x.stroke();
+    x.beginPath();
+    x.moveTo(16, 118);
+    x.lineTo(w - 16, 118);
+    x.stroke();
+    x.fillStyle = '#2b2b2b';
+    x.fillRect(56, 64, 84, 40); // viewfinder
+    x.fillStyle = '#fff';
+    x.fillRect(w - 156, 62, 96, 44); // flash
+    x.strokeRect(w - 156, 62, 96, 44);
+    disc(x, w / 2, h * 0.56, 104, '#2b2b2b');
+    disc(x, w / 2, h * 0.56, 82, '#f4f1ea');
+    disc(x, w / 2, h * 0.56, 64, '#2b2b2b');
+    disc(x, w / 2, h * 0.56, 30, '#4a5d82');
+    disc(x, w / 2 - 12, h * 0.56 - 12, 9, '#fff');
+    x.fillStyle = '#2b2b2b';
+    x.fillRect(w * 0.18, h - 44, w * 0.64, 12); // slot
 }
 
 /*
@@ -302,12 +369,29 @@ function spread(cands, n, minDist) {
     return out;
 }
 
+// split `total` marks between the guesses in proportion to their scores, at least one each
+function shareOut(weights, total) {
+    const sum = weights.reduce((a, b) => a + b, 0);
+    const w = sum > 0 ? weights : weights.map(() => 1);
+    const raw = w.map((v) => (v / (sum > 0 ? sum : w.length)) * total);
+    const counts = raw.map((r) => Math.max(1, Math.floor(r)));
+    let left = total - counts.reduce((a, b) => a + b, 0);
+    [...raw.keys()].sort((a, b) => (raw[b] % 1) - (raw[a] % 1)).forEach((i) => {
+        if (left > 0) {
+            counts[i] += 1;
+            left -= 1;
+        }
+    });
+    return counts;
+}
+
 /*
 * Strokes for each station, in sheet-canvas pixels. Edges come from the image gradient, curves
-* bend around the strongest edges, shapes and parts ring the busiest regions. It's a stand-in for
-* what real layers respond to, but it lands on the visitor's own picture.
+* bend around the strongest edges, shapes ring the busiest regions. Parts are boxes shared out
+* between the guesses by score (partCounts), the busiest regions going to the winner. It's a
+* stand-in for what real layers respond to, but it lands on the visitor's own picture.
 * */
-function makeStrokes(pixels, NX, NY, SHW, SHH) {
+function makeStrokes(pixels, NX, NY, SHW, SHH, partCounts) {
     const lum = new Float32Array(NX * NY);
     for (let k = 0; k < NX * NY; k += 1) {
         lum[k] = (0.299 * pixels[k * 4] + 0.587 * pixels[k * 4 + 1] + 0.114 * pixels[k * 4 + 2]) / 255;
@@ -379,25 +463,31 @@ function makeStrokes(pixels, NX, NY, SHW, SHH) {
         const r = bs * 0.55 * cell;
         return ring(cx, cy, r, k % 2 ? r * 0.75 : r);
     });
-    const bp = Math.max(4, Math.round(Math.min(NX, NY) / 2.4));
-    const parts = spread(blocks(bp, Math.max(1, Math.round(bp / 2))), 3, bp).map(({i, j}) => {
-        const half = bp * 0.55 * cell;
-        const [x, y] = px(i, j);
-        const cx = clamp(x, half + 6, SHW - half - 6);
-        const cy = clamp(y, half + 6, SHH - half - 6);
-        return [[cx - half, cy - half], [cx + half, cy - half], [cx + half, cy + half], [cx - half, cy + half], [cx - half, cy - half]];
+
+    const total = partCounts.reduce((a, b) => a + b, 0);
+    const bp = Math.max(3, Math.round(Math.min(NX, NY) / 3.2));
+    const regions = spread(blocks(bp, Math.max(1, Math.round(bp / 3))), total, bp * 0.75);
+    const owners = partCounts.flatMap((c, g) => Array(c).fill(g));
+    const parts = owners.map((g, k) => {
+        // a busy picture gives enough regions; a flat one repeats them, nudged so they don't stack
+        const reg = regions[k % Math.max(1, regions.length)] ?? {i: NX / 2, j: NY / 2};
+        const nudge = Math.floor(k / Math.max(1, regions.length)) * cell;
+        const half = bp * 0.5 * cell;
+        const [x, y] = px(reg.i, reg.j);
+        const cx = clamp(x + nudge, half + 6, SHW - half - 6);
+        const cy = clamp(y + nudge, half + 6, SHH - half - 6);
+        const pts = [[cx - half, cy - half], [cx + half, cy - half], [cx + half, cy + half], [cx - half, cy + half], [cx - half, cy - half]];
+        return {pts, guess: g};
     });
 
-    return [edges, curves, shapes, parts].map((list) => list.map((pts) => {
+    return [edges, curves, shapes, parts].map((list) => list.map((item) => {
+        const pts = item.pts ?? item;
         const line = polyline(pts);
+        const xs = pts.map((p) => p[0]);
         const ys = pts.map((p) => p[1]);
-        const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-        line.side = cy < SHH / 2 ? -1 : 1; // far half goes to the worker behind the belt
-        line.centre = pointAt(line, 0);
-        if (pts.length > 3) {
-            const xs = pts.map((p) => p[0]);
-            line.centre = [(Math.min(...xs) + Math.max(...xs)) / 2, cy];
-        }
+        line.centre = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+        line.side = line.centre[1] < SHH / 2 ? -1 : 1; // far half goes to the workers behind the belt
+        line.guess = item.guess;
         return line;
     }));
 }
@@ -408,7 +498,7 @@ function makeStrokes(pixels, NX, NY, SHW, SHH) {
 * quad:       normalised detection quad from the ws, optional
 * scores:     top5 from the ws, [{name, confidence}], optional
 * info:       dex entry, or a promise of one, shown under "Show data" at the end
-* onClose:   called when the user closes the overlay
+* onClose:    called when the user closes the overlay
 * */
 export function playCaptureAnimation(container, {
     frame, normalised, quad = null, scores = [], dexId = null, info = null, onClose,
@@ -457,6 +547,7 @@ export function playCaptureAnimation(container, {
         track.className = 'cap-track';
         const fill = document.createElement('div');
         fill.className = 'cap-fill';
+        fill.style.background = GUESS_COL[i]; // same colour as that guess's worker on the belt
         track.appendChild(fill);
         const pct = document.createElement('span');
         pct.className = 'cap-pct';
@@ -481,15 +572,42 @@ export function playCaptureAnimation(container, {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
 
-    // ---------- the captured photo ----------
+    // ---------- the instant camera, and the photo it spits out ----------
+    const instantMat = new THREE.MeshBasicMaterial({
+        map: canvasTexture(512, 384, drawInstantCamera), transparent: true, depthWrite: false, opacity: 0,
+    });
+    const instant = new THREE.Mesh(new THREE.PlaneGeometry(CAMW, CAMH), instantMat);
+    instant.position.set(0, CAM_Y, 0.1);
+    scene.add(instant);
+
     const {w: fw, h: fh} = sourceSize(frame);
     const fa = fw / fh;
     const PW = fa >= 1 ? PHOTO : PHOTO * fa;
     const PH = PW / fa;
+    // the photo has a back, so it can come out face down and flip over
+    const photoRig = new THREE.Group();
+    scene.add(photoRig);
     const photoMat = new THREE.MeshBasicMaterial({map: textureFrom(frame), transparent: true});
     const photo = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), photoMat);
-    photo.position.y = PY;
-    scene.add(photo);
+    photoRig.add(photo);
+    const backMat = new THREE.MeshBasicMaterial({
+        map: canvasTexture(256, Math.round(256 / fa), (x, w, h) => {
+            x.fillStyle = '#e9e4d8';
+            x.fillRect(0, 0, w, h);
+            x.strokeStyle = '#cfc8b8';
+            x.lineWidth = 6;
+            x.strokeRect(10, 10, w - 20, h - 20);
+        }),
+        transparent: true,
+    });
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), backMat);
+    back.rotation.y = Math.PI;
+    photoRig.add(back);
+    const ejectScale = EJECT_W / PW;
+    const camBottom = CAM_Y - CAMH * (0.958 - 0.5); // bottom edge of the camera body
+    const ejectFrom = new THREE.Vector3(0, camBottom + (PH * ejectScale) / 2, 0);
+    const ejectTo = new THREE.Vector3(0, camBottom - (PH * ejectScale) / 2 + 0.06, 0);
+    const photoHome = new THREE.Vector3(0, PY, 0);
 
     // crop region (pixels) -> world
     const crop = cropRect(quad, fw, fh);
@@ -617,8 +735,8 @@ export function playCaptureAnimation(container, {
     });
     floorTex.wrapS = THREE.RepeatWrapping;
     floorTex.wrapT = THREE.RepeatWrapping;
-    floorTex.repeat.set(30 / 0.8, 16 / 0.8);
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 16), new THREE.MeshBasicMaterial({
+    floorTex.repeat.set(50 / 0.8, 24 / 0.8);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(50, 24), new THREE.MeshBasicMaterial({
         map: floorTex, transparent: true, depthWrite: false,
     }));
     floor.rotation.x = -Math.PI / 2;
@@ -673,60 +791,130 @@ export function playCaptureAnimation(container, {
     sheet.rotation.x = -Math.PI / 2;
     stage.add(sheet);
 
-    const strokes = makeStrokes(pixels, NX, NY, SHW, SHH);
+    // one parts worker per top guess; with no scores, three anonymous ones
+    const guessCount = top.length || 3;
+    const partCounts = shareOut(top.length ? top.map((g) => clamp(g.confidence)) : [1, 1, 1], PART_MARKS);
+    const strokes = makeStrokes(pixels, NX, NY, SHW, SHH, partCounts);
+    const strokeCol = (L, line) => (L === 3 ? GUESS_COL[line.guess] : LCOL[L]);
 
-    // workers: one behind and one in front of the belt at each station, then a foreman at the desk
+    // where each worker stands at a station: [side of the belt, offset along it]
+    const SPOTS = {
+        3: [[-1, -0.6], [-1, 0.6], [1, 0]],
+        4: [[-1, -0.6], [-1, 0.6], [1, -0.6], [1, 0.6]],
+    };
     let wn = 0;
     const workers = [];
     function addWorker(opts, place) {
         const wk = makeWorker(wn, opts);
+        // all roughly the same height, but not identical
+        const scale = WORKER_SCALE * (0.92 + 0.16 * ((wn * 0.618) % 1));
         wn += 1;
         const shadow = new THREE.Mesh(shadowGeo, shadowMat);
         shadow.rotation.x = -Math.PI / 2;
+        shadow.scale.set(scale, scale, 1);
         stage.add(wk.group, shadow);
         if (wk.drawHand) stage.add(wk.drawHand);
-        const w = {...wk, ...place, shadow, phase: wn * 1.7};
+        const w = {...wk, ...place, scale, shadow, phase: wn * 1.7};
         workers.push(w);
         return w;
     }
+    // share a station's work window out between one worker's strokes
+    function schedule(list, st) {
+        const slot = (WORK - 0.2) / Math.max(1, list.length);
+        list.forEach((line, k) => {
+            const t0 = st.arrive + 0.1 + k * slot + slot * 0.25;
+            Object.assign(line, {t0, t1: t0 + slot * 0.75});
+        });
+        return list;
+    }
     STOPS.forEach((st, L) => {
-        [[-1, -0.3], [1, 0.6]].forEach(([s, dx]) => {
-            // share the station's work window out between this worker's strokes
-            const list = strokes[L].filter((line) => line.side === s);
-            const slot = (WORK - 0.2) / Math.max(1, list.length);
-            list.forEach((line, k) => {
-                line.t0 = st.arrive + 0.1 + k * slot + slot * 0.25;
-                line.t1 = line.t0 + slot * 0.75;
+        if (L === 3) {
+            // the parts station: each worker is one guess and draws that guess's parts
+            const spots = SPOTS[guessCount] ?? SPOTS[4].slice(0, guessCount);
+            spots.forEach(([s, dx], g) => {
+                const list = schedule(strokes[3].filter((line) => line.guess === g), st);
+                addWorker({pencil: GUESS_COL[g]}, {x: st.x + dx, side: s, arrive: st.arrive, leave: st.leave, list});
             });
+            return;
+        }
+        SPOTS[3].forEach(([s, dx]) => {
+            // far-side workers split the sheet into left and right halves; the near one takes its whole half
+            const list = schedule(strokes[L].filter((line) => line.side === s
+                && (s === 1 || (line.centre[0] < SHW / 2) === (dx < 0))), st);
             addWorker({pencil: LCOL[L]}, {x: st.x + dx, side: s, arrive: st.arrive, leave: st.leave, list});
         });
     });
     const foreman = addWorker({clipboard: true, hat: '#f4f1e8'}, {
-        x: DESK_X + 0.15, side: -1, arrive: DESK_T, leave: VOTE_END, list: [],
+        x: DESK_X, side: -1, arrive: DESK_T, leave: VOTE_END, list: [],
     });
 
     const signs = [...LNAME.map((n, L) => [`${L + 1}. ${n}`, LCOL[L], STOPS[L].x]), ['the vote', '#e9eef7', DESK_X]]
         .map(([text, color, x]) => {
-            const sign = textSprite(text, color, 1.2);
-            sign.position.set(x - 0.45, BELT_TOP + 1.05, -BELT_W / 2 - 0.5);
+            const sign = textSprite(text, color, 1.4);
+            sign.position.set(x - 0.5, BELT_TOP + 2.1, -BELT_W / 2 - 1.1);
             stage.add(sign);
             return sign;
         });
 
-    // parts fly off the sheet into the foreman's clipboard as votes
-    const voteTex = canvasTexture(64, 64, (x) => {
-        x.fillStyle = 'rgba(255,122,217,.25)';
+    // the parts fly off the sheet into the foreman's clipboard as votes, in their guess's colour
+    const voteTex = GUESS_COL.map((col) => canvasTexture(64, 64, (x) => {
+        x.globalAlpha = 0.3;
+        x.fillStyle = col;
         x.fillRect(6, 6, 52, 52);
-        x.strokeStyle = LCOL[3];
+        x.globalAlpha = 1;
+        x.strokeStyle = col;
         x.lineWidth = 6;
         x.strokeRect(6, 6, 52, 52);
-    });
+    }));
+    const FLY = xf(0.55);
+    const voteGap = (COUNT[1] - COUNT[0] - FLY) / Math.max(1, strokes[3].length - 1);
     const votes = strokes[3].map((line, i) => {
-        const v = new THREE.Sprite(new THREE.SpriteMaterial({map: voteTex, transparent: true, depthWrite: false}));
-        v.userData = {line, t0: DESK_T + 0.15 + i * 0.3};
+        const v = new THREE.Sprite(new THREE.SpriteMaterial({map: voteTex[line.guess], transparent: true, depthWrite: false}));
+        v.userData = {line, t0: COUNT[0] + i * voteGap};
         stage.add(v);
         return v;
     });
+
+    // the foreman counts out loud; a little something for the Pokémon fans
+    const lines = [
+        [DESK_T - 0.2, 'Right, from number one…'],
+        ...votes.map((v, i) => [v.userData.t0 + FLY, `${i + 1}…`]),
+        [COUNT[1] + 0.2, '…149, 150, 151!'],
+        [COUNT[1] + 1.1, "Gotta count 'em all!"],
+    ];
+    const bubbleC = document.createElement('canvas');
+    bubbleC.width = 512;
+    bubbleC.height = 220;
+    const bubbleTex = new THREE.CanvasTexture(bubbleC);
+    const bubble = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: bubbleTex, transparent: true, depthTest: false, depthWrite: false,
+    }));
+    bubble.center.set(0.1, 0); // the tail's tip
+    bubble.scale.set(1.9, (1.9 * 220) / 512, 1);
+    bubble.renderOrder = 10;
+    stage.add(bubble);
+    let bubbleText = null;
+    function drawBubble(text) {
+        const x = bubbleC.getContext('2d');
+        x.clearRect(0, 0, 512, 220);
+        x.fillStyle = '#fff';
+        x.strokeStyle = '#2b2b2b';
+        x.lineWidth = 6;
+        x.beginPath();
+        x.roundRect(8, 8, 496, 160, 40);
+        x.moveTo(40, 160);
+        x.lineTo(51, 214);
+        x.lineTo(100, 160);
+        x.fill();
+        x.stroke();
+        x.fillRect(44, 150, 52, 14); // hide the outline where the tail joins
+        x.fillStyle = '#2b2b2b';
+        x.font = '700 44px "Atkinson Hyperlegible",system-ui,sans-serif';
+        x.textAlign = 'center';
+        x.textBaseline = 'middle';
+        x.fillText(text, 256, 88, 460);
+        bubbleTex.needsUpdate = true;
+    }
 
     // ---------- the normalised image that comes out of the model ----------
     const {w: nw, h: nh} = sourceSize(normalised);
@@ -766,19 +954,21 @@ export function playCaptureAnimation(container, {
 
     // ---------- belt state at time t ----------
     function sheetAt(t) {
-        let from = {x: START_X, s: SHEET_SCALES[0]};
+        let x0 = START_X;
+        let s0 = SHEET_SCALES[0];
         let t0 = LAND;
         for (let i = 0; i < STOPS.length; i += 1) {
             const st = STOPS[i];
             if (t < st.arrive) {
                 const k = ease((t - t0) / TRAVEL);
-                return {x: lerp(from.x, st.x, k), s: lerp(from.s, SHEET_SCALES[i], k)};
+                return {x: lerp(x0, st.x - CRAWL, k), s: lerp(s0, SHEET_SCALES[i], k)};
             }
-            from = {x: st.x, s: SHEET_SCALES[i]};
+            if (t < st.leave) return {x: lerp(st.x - CRAWL, st.x + CRAWL, (t - st.arrive) / WORK), s: SHEET_SCALES[i]};
+            x0 = st.x + CRAWL;
+            s0 = SHEET_SCALES[i];
             t0 = st.leave;
-            if (t < st.leave) return from;
         }
-        return {x: lerp(from.x, DESK_X, ease((t - t0) / TRAVEL)), s: from.s};
+        return {x: lerp(x0, DESK_X, ease((t - t0) / TRAVEL)), s: s0};
     }
 
     function sheetToWorld([px, py], sh, out) {
@@ -833,15 +1023,15 @@ export function playCaptureAnimation(container, {
         x.lineCap = 'round';
         x.lineJoin = 'round';
         strokes.forEach((list, L) => {
-            const fade = L === 3 ? 0.75 * seg(t, DESK_T, DESK_T + 0.8) : 0.6 * faded(L, t);
+            const fade = L === 3 ? 0.75 * seg(t, COUNT[0], COUNT[1]) : 0.6 * faded(L, t);
             x.globalAlpha = 1 - fade;
-            x.strokeStyle = LCOL[L];
-            x.shadowColor = LCOL[L];
             x.shadowBlur = 10;
             x.lineWidth = STROKE_W[L] * (SHW / 512);
             list.forEach((line) => {
                 const p = clamp((t - line.t0) / (line.t1 - line.t0));
                 if (!(p > 0)) return;
+                x.strokeStyle = strokeCol(L, line);
+                x.shadowColor = x.strokeStyle;
                 const d = p * line.len;
                 x.beginPath();
                 x.moveTo(...line.pts[0]);
@@ -865,13 +1055,13 @@ export function playCaptureAnimation(container, {
     const camDir = new THREE.Vector3();
 
     function placeCamera(t, sheetX) {
-        const k = seg(t, 11.3, 13.3) * (1 - seg(t, VOTE_END, VOTE_END + 1.4));
+        const k = seg(t, DROP[0], DROP[1]) * (1 - seg(t, RETURN[0], RETURN[1]));
         const frontH = 2 * frontDist * Math.tan(THREE.MathUtils.degToRad(22.5));
-        const h = lerp(frontH, Math.max(3.4, 5.4 / aspect), k);
+        const h = lerp(frontH, Math.max(4.8, 6.6 / aspect), k);
         const fov = lerp(45, CAM_FOV, k);
         const el = lerp(0, CAM_EL, k);
         const yaw = lerp(0, CAM_YAW, k);
-        beltTarget.set(clamp(sheetX, START_X + 1, DESK_X - 0.6), BELT_TOP + 0.3, 0);
+        beltTarget.set(clamp(sheetX, START_X + 1, DESK_X), BELT_TOP + 0.6, 0);
         camTarget.set(0, 0, 0).lerp(beltTarget, k);
         // keep the framed height fixed while the lens narrows, so the zoom reads as a move
         const dist = h / 2 / Math.tan(THREE.MathUtils.degToRad(fov / 2));
@@ -896,13 +1086,13 @@ export function playCaptureAnimation(container, {
 
     function placeWorker(w, t, view, sh) {
         const a = seg(t, w.arrive - 0.5, w.arrive) * (1 - seg(t, w.leave, w.leave + 0.6));
-        const z = w.side * lerp(BELT_W / 2 + 0.45, BELT_W / 2 + 0.18, a);
+        const z = w.side * lerp(BELT_W / 2 + 0.8, BELT_W / 2 + 0.35, a);
         // three steps in, three steps out; the feet are down whenever a is 0 or 1
         const step = Math.sin(a * Math.PI * 6);
         const bob = 0.008 * Math.sin(t * 3 + w.phase) + 0.02 * Math.abs(step) + (w.extraBob ?? 0);
         w.group.position.set(w.x, FLOOR, z);
         w.group.rotation.y = view.yaw;
-        w.group.scale.set(1, view.stretch, 1);
+        w.group.scale.set(w.scale, w.scale * view.stretch, w.scale);
         w.group.children.forEach((m) => {
             const [bx, by, bz] = m.userData.base;
             m.position.set(bx, by + (by > 0.1 ? bob : 0), bz);
@@ -919,45 +1109,62 @@ export function playCaptureAnimation(container, {
         if (reach > 0) rest.lerp(sheetToWorld(tipAt(w.list, t), sh, tmp2), reach);
         w.drawHand.position.copy(rest);
         w.drawHand.rotation.y = view.yaw;
-        w.drawHand.scale.set(1, view.stretch, 1);
+        w.drawHand.scale.set(w.scale, w.scale * view.stretch, w.scale);
     }
 
     function render(t) {
         const sh = sheetAt(t);
         const view = placeCamera(t, sh.x);
 
-        // flash
-        // eslint-disable-next-line no-nested-ternary
-        flashEl.style.opacity = t < 0.8 ? (t < 0.2 ? t / 0.2 : clamp(1 - (t - 0.2) / 0.6)) : 0;
+        // the instant camera pops in, flashes, spits the photo out face down, then fades as the
+        // photo flips over into place
+        const kick = 1 + 0.06 * bump(t, SHUTTER, xf(0.3));
+        const camIn = seg(t, CAM_IN[0], CAM_IN[1]);
+        instantMat.opacity = camIn * (1 - seg(t, FLIP[0], FLIP[0] + xf(0.6)));
+        instant.visible = instantMat.opacity > 0.001;
+        instant.scale.setScalar(lerp(0.7, 1, camIn) * kick);
+        instant.position.y = CAM_Y + 0.4 * seg(t, FLIP[0], FLIP[1]);
+        flashEl.style.opacity = 0.75 * bump(t, SHUTTER, xf(0.3));
+
+        const eject = seg(t, EJECT[0], EJECT[1]);
+        const flip = seg(t, FLIP[0], FLIP[1]);
+        photoRig.visible = t >= EJECT[0];
+        photoRig.position.copy(ejectFrom).lerp(ejectTo, eject).lerp(photoHome, flip);
+        photoRig.position.z = lerp(-0.05, 0, flip); // tucked behind the camera until it's out
+        photoRig.rotation.y = lerp(Math.PI, 0, flip);
+        photoRig.scale.setScalar(lerp(ejectScale, 1, flip));
+
         // photo + box: they hand over to the channel planes and don't come back
-        photoMat.opacity = t < 5 ? seg(t, 0, 0.6) : 1 - seg(t, 5, 5.8);
+        photoMat.opacity = 1 - seg(t, CHAN_T, CHAN_T + xf(0.8));
+        backMat.opacity = photoMat.opacity;
         photo.visible = photoMat.opacity > 0.001;
-        boxMat.opacity = seg(t, 2.5, 3.2) * (1 - seg(t, 5, 5.8));
+        boxMat.opacity = seg(t, CROP[0], CROP[0] + xf(0.7)) * (1 - seg(t, CHAN_T, CHAN_T + xf(0.8)));
         box.visible = boxMat.opacity > 0.001;
-        const bs = lerp(1.5, 1, seg(t, 2.5, 3.4));
+        const bs = lerp(1.5, 1, seg(t, CROP[0], CROP[1]));
         box.scale.set(bs, bs, 1);
 
-        // planes: split apart, then fold back together and drop onto the belt as one sheet
-        const split = seg(t, 5.8, 7.6);
-        const norm = seg(t, 9, 11.5);
-        const move = seg(t, 11, 13.2);
-        const pOp = seg(t, 5, 5.8) * (1 - seg(t, 13.2, 13.7));
+        // planes: split apart, slide back into one picture, then drop onto the belt as the sheet
+        const split = seg(t, SPLIT[0], SPLIT[1]);
+        const norm = seg(t, NORM[0], NORM[1]);
+        const merge = seg(t, MERGE[0], MERGE[1]);
+        const drop = seg(t, DROP[0], DROP[1]);
+        const pOp = seg(t, CHAN_T, CHAN_T + xf(0.8)) * (1 - seg(t, LAND - 0.2, LAND + 0.3));
         planes.forEach(({grp}, k) => {
             grp.visible = pOp > 0.001;
-            grp.rotation.x = lerp(lerp(Math.PI / 2, 0.5, split), 0, move);
-            grp.rotation.y = lerp(lerp(0, Math.PI / 4, split), 0, move);
-            grp.position.copy(cropC).lerp(mid, split).lerp(sheetStart, move);
-            grp.position.y += (k - 1) * 1.25 * split * lerp(1, 0.22, norm) * (1 - move);
-            const s = lerp(lerp(planeStart, 1, split) * lerp(1, 0.6, norm), SHEET_SCALES[0], move);
+            grp.rotation.x = lerp(lerp(lerp(Math.PI / 2, 0.5, split), Math.PI / 2, merge), 0, drop);
+            grp.rotation.y = lerp(0, Math.PI / 4, split) * (1 - merge);
+            grp.position.copy(cropC).lerp(mid, split).lerp(sheetStart, drop);
+            grp.position.y += (k - 1) * 1.25 * split * lerp(1, 0.22, norm) * (1 - merge);
+            const s = lerp(lerp(planeStart, 1, split) * lerp(1, 0.6, norm), SHEET_SCALES[0], drop);
             grp.scale.set(s, s, s);
         });
-        if (pOp > 0.001) updatePlanes(split * lerp(1, 0.7, norm) * (1 - move), norm * (1 - move), norm, pOp);
+        if (pOp > 0.001) updatePlanes(split * lerp(1, 0.7, norm) * (1 - merge), norm * (1 - merge), norm, pOp);
 
         // conveyor
-        stage.visible = t > 10.8 && t < VOTE_END + 1.6;
+        stage.visible = t > DROP[0] - 0.2 && t < RETURN[1] + 0.2;
         if (stage.visible) {
             slatTex.offset.x = -sh.x / STRIPE;
-            sheetMat.opacity = seg(t, 13, 13.5);
+            sheetMat.opacity = seg(t, LAND - 0.3, LAND + 0.2);
             sheet.visible = sheetMat.opacity > 0.001;
             sheet.position.set(sh.x, BELT_TOP + 0.01, 0);
             sheet.scale.set(sh.s, sh.s, 1);
@@ -968,7 +1175,7 @@ export function playCaptureAnimation(container, {
 
             foreman.extraBob = 0;
             votes.forEach((v) => {
-                const k = (t - v.userData.t0) / 0.55;
+                const k = (t - v.userData.t0) / FLY;
                 foreman.extraBob += 0.05 * clamp(1 - Math.abs(k - 1) / 0.3);
             });
             workers.forEach((w) => placeWorker(w, t, view, sh));
@@ -976,36 +1183,47 @@ export function playCaptureAnimation(container, {
             foreman.group.updateMatrixWorld();
             const boardW = foreman.group.userData.board.getWorldPosition(tmp2);
             votes.forEach((v) => {
-                const k = clamp((t - v.userData.t0) / 0.55);
+                const k = clamp((t - v.userData.t0) / FLY);
                 v.visible = k > 0 && k < 1;
                 if (!v.visible) return;
                 sheetToWorld(v.userData.line.centre, sh, v.position).lerp(boardW, ease(k));
-                v.position.y += Math.sin(Math.PI * k) * 0.5;
-                const vs = lerp(0.3, 0.12, k);
+                v.position.y += Math.sin(Math.PI * k) * 0.8;
+                const vs = lerp(0.4, 0.15, k);
                 v.scale.set(vs, vs, 1);
             });
+
+            const said = lines.filter(([at]) => t >= at).pop();
+            bubble.visible = Boolean(said) && t < VOTE_END;
+            if (bubble.visible) {
+                if (said[1] !== bubbleText) {
+                    bubbleText = said[1];
+                    drawBubble(bubbleText);
+                }
+                foreman.head.getWorldPosition(bubble.position);
+                bubble.position.y += 0.35 * foreman.scale;
+            }
         }
 
         // the normalised image rises up from the belt below and settles on the left
         cardEnd.set(stageX, PY, 0.1);
         cardFrom.set(stageX, PY - 6, 0.1);
-        const out = seg(t, RESULT_T - 0.4, RESULT_T + 1.2);
-        cardMat.opacity = seg(t, RESULT_T - 0.4, RESULT_T + 0.2);
+        const out = seg(t, RESULT_T - xf(0.4), RESULT_T + xf(1.2));
+        cardMat.opacity = seg(t, RESULT_T - xf(0.4), RESULT_T + xf(0.2));
         card.visible = cardMat.opacity > 0.001;
         card.position.copy(cardFrom).lerp(cardEnd, out);
         const cs = lerp(0.08, 1, out);
         card.scale.set(cs, cs, 1);
         card.rotation.y = lerp(Math.PI * 2, 0, out);
-        cardBoxMat.opacity = seg(t, RESULT_T + 0.8, RESULT_T + 1.4);
+        cardBoxMat.opacity = seg(t, RESULT_T + xf(0.8), RESULT_T + xf(1.4));
         cardBox.visible = cardBoxMat.opacity > 0.001;
         cardBox.position.set(cardEnd.x, cardEnd.y, cardEnd.z + 0.02);
-        resultLabel.material.opacity = seg(t, RESULT_T + 1, RESULT_T + 1.6);
+        resultLabel.material.opacity = seg(t, RESULT_T + xf(1), RESULT_T + xf(1.6));
         resultLabel.visible = resultLabel.material.opacity > 0.001;
         resultLabel.position.set(cardEnd.x - cardW / 2, cardEnd.y + cardH / 2 + 0.3, cardEnd.z + 0.05);
 
         // bars
-        barsEl.style.opacity = seg(t, SCORES_T - 0.5, SCORES_T + 0.1);
-        const bk = seg(t, SCORES_T + 0.1, SCORES_T + 2.1);
+        barsEl.style.opacity = seg(t, SCORES_T, SCORES_T + xf(0.6));
+        const bk = seg(t, SCORES_T + xf(0.6), SCORES_T + xf(0.6) + xf(2));
         top.forEach(({confidence}, i) => {
             const v = clamp(confidence) * bk * 100;
             fills[i][0].style.width = `${v}%`;
