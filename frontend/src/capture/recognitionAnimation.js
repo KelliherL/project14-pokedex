@@ -29,53 +29,68 @@ const DEBUG = true;
 const DEBUG_FPS = 60; // playback is time-based; the frame number is just t at this nominal rate
 
 // ---------- timeline ----------
-// One speed per section: 1 = as it is now, 2 = twice as fast, 0.5 = half speed. Everything in the
-// section scales with it, including the pause leading into it.
-const SPEED = {
-    capture: 2, // camera pops in, spits out the photo, photo flips into place
-    crop: 1.5, // detection box appears
-    channels: 1, // photo splits into blue, green and red
-    normalise: 1, // resize and normalize
-    merge: 1.25, // the channels slide back into one picture
-    drop:0.8, // camera and picture drop down to the belt
-    stations: 0.6, // workers drawing at each station
-    travel: 0.75, // the belt rushing between stations
-    vote: 0.75, // votes flying to the foreman, and his last line
-    scores: 1, // camera back to the front view, score bars filling
-    result: 1, // normalised image rising up, name appearing
+// How long each moving part and each pause takes, in seconds. Each one starts where the one
+// before it ends, so changing any value shifts everything after it along.
+const TIMING = {
+    // the photo
+    cameraIn: 0.28, // instant camera pops in
+    beforeFlash: 0.1, // wait before the flash goes off
+    flash: 0.21, // the flash itself
+    eject: 0.7, // photo slides out of the slot, face down
+    cameraFade: 0.35, // camera fades away
+    flip: 0.84, // photo flips over into place
+    // locate and crop
+    beforeCrop: 0.95,
+    crop: 0.84, // detection box zooms in and settles
+    // split into channels
+    beforeChannels: 1.2,
+    photoToDots: 1.12, // photo fades into the three channel planes
+    split: 2.52, // the planes lift apart
+    // resize and normalize
+    beforeNormalise: 1.05,
+    normalise: 3.5,
+    // the model
+    merge: 2.35, // the channels slide back into one picture
+    drop: 5.78, // camera and picture drop down to the belt; the dots become the sheet on the way
+    travel: 2, // the belt rushing from one station to the next
+    station: 4.9, // workers drawing at each station
+    // the vote
+    voteCamera: 2, // camera comes down to face the foreman, overlapping the end of the belt
+    beforeVotes: 0.4,
+    votes: 5.04, // all the votes flying into the clipboard
+    voteFlight: 1.54, // one vote's flight
+    countLine: 2, // how long "…149, 150, 151!" stays up
+    jokeLine: 3, // how long "Gotta count 'em all!" stays up
+    // scores
+    cameraReturn: 4, // camera rises back to the front view
+    barsIn: 1.26,
+    barsFill: 4.2,
+    // result
+    beforeResult: 1.05,
+    resultRise: 3.36, // normalised image rises up and settles
+    resultLabels: 1.26, // red box and name appear
+    resultHold: 1.5,
 };
+const T = TIMING;
+const span = (start, len) => [start, start + len];
 
-// Within a section, each phase is either a transformation (the data visibly changes) or a gap
-// (waiting, or the camera moving), weighted differently. SPEED is usually all that needs touching.
-const XF_SCALE = 1.4;
-const GAP_SCALE = 0.75;
-const LATE_SCALE = 1.5; // transformations after the resize step run longer still
-const xf = (sec, s) => (s * XF_SCALE) / SPEED[sec];
-const gap = (sec, s) => (s * GAP_SCALE) / SPEED[sec];
-const lateXf = (sec, s) => (s * XF_SCALE * LATE_SCALE) / SPEED[sec];
-
-const CAM_IN = [0, xf('capture', 0.4)]; // the instant camera pops in
-const SHUTTER = CAM_IN[1] + xf('capture', 0.15);
-const FLASH = xf('capture', 0.3);
-const EJECT = [SHUTTER + FLASH, SHUTTER + xf('capture', 1.3)]; // the photo slides out of the slot, face down
-const CAM_FADE = [EJECT[1], EJECT[1] + xf('capture', 0.5)]; // camera fades away before the flip so they never cross
-const FLIP = [CAM_FADE[1], CAM_FADE[1] + xf('capture', 1.2)]; // photo flips over into place
-const CROP = [FLIP[1] + gap('crop', 1.9), FLIP[1] + gap('crop', 1.9) + xf('crop', 0.9)];
-const BOX_IN = xf('crop', 0.7);
-const CHAN_T = CROP[1] + gap('channels', 1.6); // photo hands over to the channel planes
-const CHAN_IN = xf('channels', 0.8);
-const SPLIT = [CHAN_T + CHAN_IN, CHAN_T + xf('channels', 2.6)];
-const NORM = [SPLIT[1] + gap('normalise', 1.4), SPLIT[1] + gap('normalise', 1.4) + xf('normalise', 2.5)];
-const MERGE = [NORM[1], NORM[1] + lateXf('merge', 1.4)]; // the three planes slide back into one picture
-// camera and picture drop down to the belt, the dots turning into the sheet on the way; slow enough
-// to follow, so it's paced as a transformation rather than a camera move
-const DROP = [MERGE[1], MERGE[1] + lateXf('drop', 2.2)];
+const CAM_IN = [0, T.cameraIn];
+const SHUTTER = CAM_IN[1] + T.beforeFlash;
+const EJECT = span(SHUTTER + T.flash, T.eject);
+const CAM_FADE = span(EJECT[1], T.cameraFade); // camera gone before the flip so they never cross
+const FLIP = span(CAM_FADE[1], T.flip);
+const CROP = span(FLIP[1] + T.beforeCrop, T.crop);
+const CHAN_T = CROP[1] + T.beforeChannels; // photo hands over to the channel planes
+const SPLIT = span(CHAN_T + T.photoToDots, T.split);
+const NORM = span(SPLIT[1] + T.beforeNormalise, T.normalise);
+const MERGE = span(NORM[1], T.merge);
+const DROP = span(MERGE[1], T.drop);
 const LAND = DROP[1];
 
 // The belt never stops: it crawls past each station while the workers mark the sheet, and
 // rushes between stations.
-const TRAVEL = gap('travel', 2);
-const WORK = lateXf('stations', 1.4);
+const TRAVEL = T.travel;
+const WORK = T.station;
 const CRAWL = 0.35; // how far the sheet creeps while a station works on it
 // about five floor squares of empty belt between one station's workers and the next
 const STATION_X = [-9.15, -3.05, 3.05, 9.15];
@@ -84,16 +99,16 @@ const STOPS = STATION_X.map((x, i) => {
     return {x, arrive, leave: arrive + WORK};
 });
 const DESK_T = STOPS[3].leave + TRAVEL; // sheet reaches the foreman
-const COUNT = [DESK_T + 0.3 / SPEED.vote, DESK_T + 0.3 / SPEED.vote + lateXf('vote', 1.8)]; // votes fly into the clipboard
-const FLY = lateXf('vote', 0.55); // one vote's flight
-const VOTE_END = COUNT[1] + 2 / SPEED.vote; // time to read the foreman's last line
-const RETURN = [VOTE_END, VOTE_END + gap('scores', 1.4)]; // camera rises back to the front view
-const SCORES_T = RETURN[1] - gap('scores', 0.3);
-const BARS_IN = lateXf('scores', 0.6);
-const BARS_FILL = lateXf('scores', 2);
-const RESULT_T = SCORES_T + BARS_IN + BARS_FILL + gap('result', 1.4);
-const res = (s) => lateXf('result', s); // result timings, as offsets from RESULT_T
-const END = RESULT_T + res(1.6) + 1.5 / SPEED.result;
+const VOTE_CAM = span(DESK_T - T.voteCamera / 2, T.voteCamera);
+// votes only start flying once the camera has settled on the foreman
+const COUNT = span(Math.max(DESK_T, VOTE_CAM[1]) + T.beforeVotes, T.votes);
+const FLY = T.voteFlight;
+const VOTE_END = COUNT[1] + T.countLine + T.jokeLine;
+const RETURN = span(VOTE_END, T.cameraReturn); // camera rises back to the front view
+const SCORES_T = RETURN[1] - 0.2; // bars start fading in just before the camera settles
+const BARS = span(SCORES_T + T.barsIn, T.barsFill);
+const RESULT = span(BARS[1] + T.beforeResult, T.resultRise);
+const END = RESULT[1] + T.resultLabels + T.resultHold;
 
 const STEPS = [
     [0, 'Capture', 'The camera grabs a single frame.'],
@@ -105,7 +120,7 @@ const STEPS = [
     [STOPS[3].arrive, 'Parts point to answers', 'At the last station each worker stands for one possible answer and marks the parts that point to it. The more they find, the higher that answer scores.'],
     [DESK_T, 'The vote', 'The marks are counted up as votes for each Pokémon.'],
     [SCORES_T, 'Scores', 'The last layer gives one score per Pokémon. The highest wins.'],
-    [RESULT_T - res(0.4), 'Result', 'Out comes the normalised image the classifier worked on, with the name it gave.'],
+    [RESULT[0], 'Result', 'Out comes the normalised image the classifier worked on, with the name it gave.'],
 ];
 const MAX_SCORE_ROWS = 4;
 
@@ -117,7 +132,6 @@ const GROW = PLANE / 2.25; // how much bigger the planes are than the original e
 const GRID = 40; // channel grid resolution along a square crop
 const CHAN = [[0, 0, 1], [0, 1, 0], [1, 0, 0]]; // B, G, R (OpenCV order)
 const LCOL = ['#5ad1ff', '#7dff9b', '#ffd45a', '#ff7ad9'];
-const LNAME = ['edges', 'curves', 'shapes', 'parts'];
 // one per top guess, winner first; the score bars use the same colours
 const GUESS_COL = ['#ff5a5a', '#ff9f1c', '#b78cff', '#3fe0c5'];
 const PART_MARKS = 8; // parts shared out between the guesses by score
@@ -142,12 +156,21 @@ const STRIPE = 0.35; // spacing of the belt's slats
 // the sheet shrinks at each station, like a network's maps (divided by GROW so the sheet on the
 // belt stays the same size however big the front-view planes are)
 const SHEET_SCALES = [0.62, 0.56, 0.5, 0.44].map((s) => s / GROW);
-const STROKE_W = [5, 6, 8, 10]; // marks get bolder as they get fewer
+const STROKE_W = [10, 6, 8, 10]; // line width per station; edges are doubled so they read at a distance
 // belt camera: looking down ~35 degrees, turned so the belt comes towards us from the top left,
 // through a narrow lens so it reads as near-orthographic
 const CAM_EL = 0.6;
 const CAM_YAW = 0.75;
 const CAM_FOV = 12;
+const CAM_VOTE_EL = 0.42; // a little flatter while the foreman counts, so we look at him rather than down on him
+const VOTE_FRAME = 3; // how much height the vote shot frames, in world units; smaller = tighter
+// the painted floor fades out in an oval around the belt so tape and floor don't run off to the
+// horizon: [radius along the belt, radius across it], and how soft the edge is. Equal radii = circle
+const FLOOR_FADE = [19, 7];
+const FLOOR_FADE_SOFT = 3;
+const SECTION_NAMES = ['EDGES', 'CURVES', 'SHAPES', 'PARTS', 'THE VOTE']; // painted on the floor
+const LAMP_H = 3.4; // how high the overhead lamps hang above the belt
+const TAPE = 0.25; // width of the hazard tape between sections
 
 // ---------- worker look ----------
 const WORKER_SCALE = 1.9;
@@ -823,11 +846,203 @@ export function playCaptureAnimation(container, {
     ]);
     belt.position.set((BELT_X0 + BELT_X1) / 2, FLOOR + BELT_H / 2, 0);
     stage.add(belt);
+    // ---------- sections: floor colour, hazard tape, a seam in the belt, and the name on the floor ----------
+    // Everything here fades in with the floor during the drop, so it's kept in one list.
+    const fading = []; // [material, full opacity]
+    const fade = (mat, full = 1) => {
+        fading.push([mat, full]);
+        return mat;
+    };
+    // Floor-level paint also fades out in an oval around the belt (FLOOR_FADE), worked out per pixel
+    // from its world position, so the tape and floor colours stop instead of running to the horizon.
+    const ovalFade = {
+        uFadeCentre: {value: new THREE.Vector2((BELT_X0 + BELT_X1) / 2, 0)},
+        uFadeRadius: {value: new THREE.Vector2(...FLOOR_FADE)},
+        uFadeSoft: {value: FLOOR_FADE_SOFT},
+    };
+    const oval = (mat) => {
+        Object.assign(mat, {
+            onBeforeCompile: (shader) => {
+                Object.assign(shader.uniforms, ovalFade);
+                Object.assign(shader, {
+                    vertexShader: shader.vertexShader
+                        .replace('#include <common>', '#include <common>\nvarying vec2 vFadeXZ;')
+                        .replace('#include <project_vertex>',
+                            '#include <project_vertex>\nvFadeXZ = (modelMatrix * vec4(transformed, 1.0)).xz;'),
+                    fragmentShader: shader.fragmentShader
+                        .replace('#include <common>', `#include <common>
+                            varying vec2 vFadeXZ;
+                            uniform vec2 uFadeCentre;
+                            uniform vec2 uFadeRadius;
+                            uniform float uFadeSoft;`)
+                        .replace('#include <opaque_fragment>', `
+                            // distance outside the oval, in world units (roughly)
+                            float fadeOut = (length((vFadeXZ - uFadeCentre) / uFadeRadius) - 1.0) * min(uFadeRadius.x, uFadeRadius.y);
+                            diffuseColor.a *= 1.0 - smoothstep(-uFadeSoft, 0.0, fadeOut);
+                            #include <opaque_fragment>`),
+                });
+            },
+        });
+        return mat;
+    };
+    oval(fade(floor.material));
+    // section edges: before the first station, halfway between stations, and before the desk
+    const edges = [
+        STATION_X[0] - (STATION_X[1] - STATION_X[0]) / 2,
+        ...STATION_X.slice(1).map((x, i) => (x + STATION_X[i]) / 2),
+        (STATION_X[3] + DESK_X) / 2,
+        BELT_X1 + 8,
+    ];
+
+    // the rails along the belt's edges are split at each seam too, so the belt reads as separate sections
     const railMat = new THREE.MeshBasicMaterial({color: 0x56688a});
-    [-1, 1].forEach((s) => {
-        const rail = new THREE.Mesh(new THREE.BoxGeometry(beltLen, 0.07, 0.07), railMat);
-        rail.position.set(belt.position.x, BELT_TOP + 0.035, s * (BELT_W / 2 - 0.035));
-        stage.add(rail);
+    const railBreaks = [BELT_X0, ...edges.slice(0, 5), BELT_X1];
+    railBreaks.slice(1).forEach((x1, i) => {
+        const x0 = railBreaks[i];
+        const len = x1 - x0 - (i ? 0.05 : 0) - (i < railBreaks.length - 2 ? 0.05 : 0);
+        const mid = (x0 + x1) / 2 + ((i ? 0.025 : 0) - (i < railBreaks.length - 2 ? 0.025 : 0));
+        [-1, 1].forEach((s) => {
+            const rail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.07, 0.07), railMat);
+            rail.position.set(mid, BELT_TOP + 0.035, s * (BELT_W / 2 - 0.035));
+            stage.add(rail);
+        });
+    });
+    const sectionCol = [...LCOL, '#e9eef7'];
+    const floorBase = new THREE.Color(0x0e1726);
+    SECTION_NAMES.forEach((name, i) => {
+        const [x0, x1] = [edges[i], edges[i + 1]];
+        const patch = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, 100), oval(fade(new THREE.MeshBasicMaterial({
+            color: floorBase.clone().lerp(new THREE.Color(sectionCol[i]), 0.13), transparent: true, depthWrite: false,
+        }))));
+        patch.rotation.x = -Math.PI / 2;
+        patch.position.set((x0 + x1) / 2, FLOOR - 0.002, 0);
+        patch.renderOrder = -1; // under the grid lines
+        stage.add(patch);
+
+        // the name, painted on the floor just past the tape and right up against the front of the
+        // belt, where the workers don't stand on it; it reads along the tape like a road marking
+        const paint = canvasTexture(1024, 256, (x, w, h) => {
+            x.font = '900 190px Impact, "Arial Black", sans-serif';
+            x.textAlign = 'center';
+            x.textBaseline = 'middle';
+            x.fillStyle = sectionCol[i];
+            x.fillText(name, w / 2, h / 2 + 8, w - 40);
+            // worn paint
+            const rnd = makeRnd(31 + i);
+            x.globalCompositeOperation = 'destination-out';
+            for (let k = 0; k < 260; k += 1) {
+                x.globalAlpha = 0.3 + rnd() * 0.7;
+                x.fillRect(rnd() * w, rnd() * h, 2 + rnd() * 7, 2 + rnd() * 5);
+            }
+        });
+        const [lw, lh] = [2.6, 0.65];
+        const label = new THREE.Mesh(new THREE.PlaneGeometry(lw, lh), fade(new THREE.MeshBasicMaterial({
+            map: paint, transparent: true, depthWrite: false,
+        }), 0.85));
+        // lie flat, baseline running across the belt and the tops of the letters pointing back up the line
+        label.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
+        label.position.set(x0 + TAPE / 2 + 0.3 + lh / 2, FLOOR + 0.003, BELT_W / 2 + 0.25 + lw / 2);
+        stage.add(label);
+    });
+
+    // yellow and black hazard tape at each section edge: across the floor, up both sides of the
+    // belt, and a seam across the belt itself.
+    // The texture is twice the tape's width and only the left half is used, so the stripes only
+    // have to repeat seamlessly along the tape: diagonal bands about 50 degrees to its length, each
+    // band three quarters of the tape's width, like the real thing.
+    const TAPE_PX = 32; // tape width in texture pixels
+    const BAND = 24; // one band's length along the tape, in pixels
+    const SLANT = 0.8; // how far a stripe moves along the tape per pixel across it
+    const tapeMat = (length) => {
+        const map = canvasTexture(TAPE_PX * 2, BAND * 2, (x, w, h) => {
+            x.fillStyle = '#ffc900';
+            x.fillRect(0, 0, w, h);
+            x.fillStyle = '#151515';
+            for (let k = -1; k <= 3; k += 1) {
+                x.beginPath();
+                x.moveTo(0, k * h);
+                x.lineTo(0, k * h + BAND);
+                x.lineTo(w, k * h + BAND - w * SLANT);
+                x.lineTo(w, k * h - w * SLANT);
+                x.fill();
+            }
+            // a little wear
+            const rnd = makeRnd(5);
+            x.fillStyle = 'rgba(255,255,255,.12)';
+            for (let k = 0; k < 40; k += 1) x.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 3, 1);
+        });
+        map.wrapS = THREE.RepeatWrapping;
+        map.wrapT = THREE.RepeatWrapping;
+        map.repeat.set(0.5, length / (TAPE * (BAND * 2) / TAPE_PX));
+        return fade(new THREE.MeshBasicMaterial({map, transparent: true, depthWrite: false}));
+    };
+    const floorTape = oval(tapeMat(100));
+    const sideTape = tapeMat(BELT_H);
+    const seamMat = fade(new THREE.MeshBasicMaterial({color: 0x121a28, transparent: true}));
+    edges.slice(0, 5).forEach((x) => {
+        const strip = new THREE.Mesh(new THREE.PlaneGeometry(TAPE, 100), floorTape);
+        strip.rotation.x = -Math.PI / 2;
+        strip.position.set(x, FLOOR + 0.002, 0);
+        stage.add(strip);
+        [-1, 1].forEach((s) => {
+            const side = new THREE.Mesh(new THREE.PlaneGeometry(TAPE, BELT_H), sideTape);
+            side.rotation.y = s > 0 ? 0 : Math.PI;
+            side.position.set(x, FLOOR + BELT_H / 2, s * (BELT_W / 2 + 0.004));
+            stage.add(side);
+        });
+        const seam = new THREE.Mesh(new THREE.PlaneGeometry(0.07, BELT_W), seamMat);
+        seam.rotation.x = -Math.PI / 2;
+        seam.position.set(x, BELT_TOP + 0.003, 0);
+        stage.add(seam);
+    });
+
+    // ---------- overhead lamps: a warm cone of light over each station and the desk ----------
+    // Additive and drawn late, so the light spills over the workers and the belt beneath.
+    const beamTex = canvasTexture(8, 128, (x, w, h) => {
+        const g = x.createLinearGradient(0, 0, 0, h);
+        g.addColorStop(0, 'rgba(255,236,190,.9)');
+        g.addColorStop(0.6, 'rgba(255,236,190,.25)');
+        g.addColorStop(1, 'rgba(255,236,190,0)');
+        x.fillStyle = g;
+        x.fillRect(0, 0, w, h);
+    });
+    const poolTex = canvasTexture(128, 128, (x, w) => {
+        const g = x.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
+        g.addColorStop(0, 'rgba(255,236,190,.8)');
+        g.addColorStop(1, 'rgba(255,236,190,0)');
+        x.fillStyle = g;
+        x.fillRect(0, 0, w, w);
+    });
+    const lit = (map, full) => fade(new THREE.MeshBasicMaterial({
+        map, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    }), full);
+    const beamMat = lit(beamTex, 0.22);
+    const poolMat = lit(poolTex, 0.3);
+    const shadeMat = fade(new THREE.MeshBasicMaterial({color: 0x2a3140, transparent: true, side: THREE.DoubleSide}));
+    const bulbMat = fade(new THREE.MeshBasicMaterial({color: 0xfff1c4, transparent: true}));
+    const lampY = BELT_TOP + LAMP_H;
+    [...STATION_X, DESK_X].forEach((x, i) => {
+        const z = i < STATION_X.length ? 0 : -(BELT_W / 2 + 0.35); // the desk lamp hangs over the foreman
+        // long enough to run off the top of the screen from every belt-view angle
+        const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 30), shadeMat);
+        cable.position.set(x, lampY + 15, z);
+        const shade = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.32, 24, 1, true), shadeMat);
+        shade.position.set(x, lampY, z);
+        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8), bulbMat);
+        bulb.position.set(x, lampY - 0.1, z);
+        const drop = lampY - FLOOR;
+        const beam = new THREE.Mesh(new THREE.ConeGeometry(2.3, drop, 32, 1, true), beamMat);
+        beam.position.set(x, lampY - drop / 2, z);
+        const floorPool = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), poolMat);
+        floorPool.rotation.x = -Math.PI / 2;
+        floorPool.position.set(x, FLOOR + 0.004, z);
+        const beltPool = new THREE.Mesh(new THREE.PlaneGeometry(4, BELT_W), poolMat);
+        beltPool.rotation.x = -Math.PI / 2;
+        beltPool.position.set(x, BELT_TOP + 0.004, 0);
+        [beam, floorPool, beltPool].forEach((m) => {
+            m.renderOrder = 5; // after the workers and the sheet, so it lights them
+        });
+        stage.add(cable, shade, bulb, beam, floorPool, beltPool);
     });
 
     const shadowTex = canvasTexture(64, 32, (x) => {
@@ -911,14 +1126,6 @@ export function playCaptureAnimation(container, {
         x: DESK_X, side: -1, arrive: DESK_T, leave: VOTE_END, list: [],
     });
 
-    const signs = [...LNAME.map((n, L) => [`${L + 1}. ${n}`, LCOL[L], STOPS[L].x]), ['the vote', '#e9eef7', DESK_X]]
-        .map(([text, color, x]) => {
-            const sign = textSprite(text, color, 1.4);
-            sign.position.set(x - 0.5, BELT_TOP + 2.1, -BELT_W / 2 - 1.1);
-            stage.add(sign);
-            return sign;
-        });
-
     // the parts fly off the sheet into the foreman's clipboard as votes, in their guess's colour
     const voteTex = GUESS_COL.map((col) => canvasTexture(64, 64, (x) => {
         x.globalAlpha = 0.3;
@@ -931,7 +1138,10 @@ export function playCaptureAnimation(container, {
     }));
     const voteGap = (COUNT[1] - COUNT[0] - FLY) / Math.max(1, strokes[3].length - 1);
     const votes = strokes[3].map((line, i) => {
-        const v = new THREE.Sprite(new THREE.SpriteMaterial({map: voteTex[line.guess], transparent: true, depthWrite: false}));
+        const v = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: voteTex[line.guess], transparent: true, depthTest: false, depthWrite: false,
+        }));
+        v.renderOrder = 9; // in flight they draw over everything, so nothing can cut through them
         v.userData = {line, t0: COUNT[0] + i * voteGap};
         stage.add(v);
         return v;
@@ -939,10 +1149,11 @@ export function playCaptureAnimation(container, {
 
     // the foreman counts out loud; a little something for the Pokémon fans
     const lines = [
-        [DESK_T - 0.2 / SPEED.vote, 'Right, from number one…'],
-        ...votes.map((v, i) => [v.userData.t0 + FLY, `${i + 1}…`]),
-        [COUNT[1] + 0.2 / SPEED.vote, '…149, 150, 151!'],
-        [COUNT[1] + 1.1 / SPEED.vote, "Gotta count 'em all!"],
+        [DESK_T - 0.2, 'Right!'],
+        // he counts the first few as they reach the clipboard, then skips ahead as the last one lands
+        ...votes.slice(0, 6).map((v, i) => [v.userData.t0 + 0.85 * FLY, `${i + 1}…`]),
+        [COUNT[1], '…149, 150, 151!'],
+        [COUNT[1] + T.countLine, "Gotta count 'em all!"],
     ];
     const bubbleC = document.createElement('canvas');
     bubbleC.width = 512;
@@ -1122,14 +1333,21 @@ export function playCaptureAnimation(container, {
     const beltTarget = new THREE.Vector3();
     const camDir = new THREE.Vector3();
 
+    // for the vote the camera comes down and tilts up so the foreman and his bubble sit centred;
+    // nudged right along the view because the bubble hangs off to the right of his head
+    const voteTarget = new THREE.Vector3(DESK_X, FLOOR + 1.4, -(BELT_W / 2 + 0.35))
+        .add(new THREE.Vector3(Math.cos(CAM_YAW), 0, -Math.sin(CAM_YAW)).multiplyScalar(0.45));
+
     function placeCamera(t, sheetX) {
         const k = seg(t, DROP[0], DROP[1]) * (1 - seg(t, RETURN[0], RETURN[1]));
+        const v = seg(t, VOTE_CAM[0], VOTE_CAM[1]);
         const frontH = 2 * frontDist * Math.tan(THREE.MathUtils.degToRad(22.5));
-        const h = lerp(frontH, Math.max(4.8, 6.6 / aspect), k);
+        const beltH = lerp(Math.max(4.8, 6.6 / aspect), Math.max(VOTE_FRAME, 4 / aspect), v);
+        const h = lerp(frontH, beltH, k);
         const fov = lerp(45, CAM_FOV, k);
-        const el = lerp(0, CAM_EL, k);
+        const el = lerp(0, lerp(CAM_EL, CAM_VOTE_EL, v), k);
         const yaw = lerp(0, CAM_YAW, k);
-        beltTarget.set(clamp(sheetX, START_X + 1, DESK_X), BELT_TOP + 0.6, 0);
+        beltTarget.set(clamp(sheetX, START_X + 1, DESK_X), BELT_TOP + 0.6, 0).lerp(voteTarget, v);
         camTarget.set(0, 0, 0).lerp(beltTarget, k);
         // keep the framed height fixed while the lens narrows, so the zoom reads as a move
         const dist = h / 2 / Math.tan(THREE.MathUtils.degToRad(fov / 2));
@@ -1186,14 +1404,14 @@ export function playCaptureAnimation(container, {
 
         // the instant camera pops in, flashes and spits the photo out of its slot face down, then
         // fades away completely before the photo flips over into place
-        const kick = 1 + 0.06 * bump(t, SHUTTER, FLASH);
+        const kick = 1 + 0.06 * bump(t, SHUTTER, T.flash);
         const camIn = seg(t, CAM_IN[0], CAM_IN[1]);
         const camOut = seg(t, CAM_FADE[0], CAM_FADE[1]);
         instantMat.opacity = camIn * (1 - camOut);
         instant.visible = instantMat.opacity > 0.001;
         instant.scale.setScalar(lerp(0.7, 1, camIn) * kick);
         instant.position.y = CAM_Y + 0.3 * camOut;
-        flashEl.style.opacity = 0.75 * bump(t, SHUTTER, FLASH);
+        flashEl.style.opacity = 0.75 * bump(t, SHUTTER, T.flash);
 
         const eject = seg(t, EJECT[0], EJECT[1]);
         const flip = seg(t, FLIP[0], FLIP[1]);
@@ -1205,10 +1423,10 @@ export function playCaptureAnimation(container, {
         slotClip.constant = t < EJECT[1] ? slotY : 1000;
 
         // photo + box: they hand over to the channel planes and don't come back
-        photoMat.opacity = 1 - seg(t, CHAN_T, CHAN_T + CHAN_IN);
+        photoMat.opacity = 1 - seg(t, CHAN_T, CHAN_T + T.photoToDots);
         backMat.opacity = photoMat.opacity;
         photo.visible = photoMat.opacity > 0.001;
-        boxMat.opacity = seg(t, CROP[0], CROP[0] + BOX_IN) * (1 - seg(t, CHAN_T, CHAN_T + CHAN_IN));
+        boxMat.opacity = seg(t, CROP[0], CROP[0] + 0.78 * T.crop) * (1 - seg(t, CHAN_T, CHAN_T + T.photoToDots));
         box.visible = boxMat.opacity > 0.001;
         const bs = lerp(1.5, 1, seg(t, CROP[0], CROP[1]));
         box.scale.set(bs, bs, 1);
@@ -1221,7 +1439,7 @@ export function playCaptureAnimation(container, {
         const drop = seg(t, DROP[0], DROP[1]);
         const dropLen = DROP[1] - DROP[0];
         const toSheet = seg(t, DROP[0] + 0.35 * dropLen, DROP[0] + 0.75 * dropLen);
-        const pOp = seg(t, CHAN_T, CHAN_T + CHAN_IN) * (1 - toSheet);
+        const pOp = seg(t, CHAN_T, CHAN_T + T.photoToDots) * (1 - toSheet);
         const rx = lerp(lerp(lerp(Math.PI / 2, 0.5, split), Math.PI / 2, merge), 0, drop);
         // the resize step shrinks the planes by the same proportion however big the split is
         const ps = lerp(lerp(planeStart, 1, split) * lerp(1, 0.6, norm), SHEET_SCALES[0], drop);
@@ -1240,8 +1458,13 @@ export function playCaptureAnimation(container, {
         // conveyor
         stage.visible = t > DROP[0] - 0.2 && t < RETURN[1] + 0.2;
         if (stage.visible) {
-            // the floor fades in early in the drop, so there's something to judge the move against
-            floor.material.opacity = seg(t, DROP[0], DROP[0] + 0.3 * dropLen);
+            // the floor fades in early in the drop, so there's something to judge the move against,
+            // and everything on it (lamp cables included) fades out over the last second of the
+            // camera's return instead of vanishing
+            const floorIn = seg(t, DROP[0], DROP[0] + 0.3 * dropLen) * (1 - seg(t, RETURN[1] - 0.8, RETURN[1] + 0.2));
+            fading.forEach(([mat, full]) => {
+                mat.opacity = full * floorIn;
+            });
             slatTex.offset.x = -sh.x / STRIPE;
             sheetMat.opacity = toSheet;
             sheet.visible = sheetMat.opacity > 0.001;
@@ -1256,9 +1479,6 @@ export function playCaptureAnimation(container, {
                 sheet.scale.set(sh.s, sh.s, 1);
             }
             if (sheet.visible) drawSheet(t);
-            signs.forEach((sign) => {
-                sign.material.opacity = 1;
-            });
 
             foreman.extraBob = 0;
             votes.forEach((v) => {
@@ -1267,16 +1487,20 @@ export function playCaptureAnimation(container, {
             });
             workers.forEach((w) => placeWorker(w, t, view, sh));
 
+            // votes land just in front of the clipboard, shrinking and fading into it rather than
+            // passing through it
             foreman.group.updateMatrixWorld();
             const boardW = foreman.group.userData.board.getWorldPosition(tmp2);
+            boardW.addScaledVector(tmp.subVectors(camera.position, boardW).normalize(), 0.3);
             votes.forEach((v) => {
                 const k = clamp((t - v.userData.t0) / FLY);
                 v.visible = k > 0 && k < 1;
                 if (!v.visible) return;
                 sheetToWorld(v.userData.line.centre, sh, v.position).lerp(boardW, ease(k));
                 v.position.y += Math.sin(Math.PI * k) * 0.8;
-                const vs = lerp(0.4, 0.15, k);
+                const vs = lerp(0.4, 0.12, ease(k));
                 v.scale.set(vs, vs, 1);
+                v.material.opacity = 1 - clamp((k - 0.92) / 0.08); // only vanishes as it reaches the board
             });
 
             const said = lines.filter(([at]) => t >= at).pop();
@@ -1287,30 +1511,30 @@ export function playCaptureAnimation(container, {
                     drawBubble(bubbleText);
                 }
                 foreman.head.getWorldPosition(bubble.position);
-                bubble.position.y += 0.35 * foreman.scale;
+                bubble.position.y += 0.2 * foreman.scale; // tail tip just above his hat
             }
         }
 
         // the normalised image rises up from the belt below and settles on the left
         cardEnd.set(stageX, PY, 0.1);
         cardFrom.set(stageX, PY - 6, 0.1);
-        const out = seg(t, RESULT_T - res(0.4), RESULT_T + res(1.2));
-        cardMat.opacity = seg(t, RESULT_T - res(0.4), RESULT_T + res(0.2));
+        const out = seg(t, RESULT[0], RESULT[1]);
+        cardMat.opacity = seg(t, RESULT[0], RESULT[0] + 0.375 * T.resultRise);
         card.visible = cardMat.opacity > 0.001;
         card.position.copy(cardFrom).lerp(cardEnd, out);
         const cs = lerp(0.08, 1, out);
         card.scale.set(cs, cs, 1);
         card.rotation.y = lerp(Math.PI * 2, 0, out);
-        cardBoxMat.opacity = seg(t, RESULT_T + res(0.8), RESULT_T + res(1.4));
+        cardBoxMat.opacity = seg(t, RESULT[1], RESULT[1] + 0.67 * T.resultLabels);
         cardBox.visible = cardBoxMat.opacity > 0.001;
         cardBox.position.set(cardEnd.x, cardEnd.y, cardEnd.z + 0.02);
-        resultLabel.material.opacity = seg(t, RESULT_T + res(1), RESULT_T + res(1.6));
+        resultLabel.material.opacity = seg(t, RESULT[1] + 0.33 * T.resultLabels, RESULT[1] + T.resultLabels);
         resultLabel.visible = resultLabel.material.opacity > 0.001;
         resultLabel.position.set(cardEnd.x - cardW / 2, cardEnd.y + cardH / 2 + 0.3, cardEnd.z + 0.05);
 
         // bars
-        barsEl.style.opacity = seg(t, SCORES_T, SCORES_T + BARS_IN);
-        const bk = seg(t, SCORES_T + BARS_IN, SCORES_T + BARS_IN + BARS_FILL);
+        barsEl.style.opacity = seg(t, SCORES_T, BARS[0]);
+        const bk = seg(t, BARS[0], BARS[1]);
         top.forEach(({confidence}, i) => {
             const v = clamp(confidence) * bk * 100;
             fills[i][0].style.width = `${v}%`;
