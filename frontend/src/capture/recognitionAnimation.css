@@ -1,15 +1,21 @@
-@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap');
 
 /* Full-screen overlay for the "how the Pokédex recognises a Pokémon" animation.
-   Everything is scoped under .cap-stage so it can't leak into the rest of the app. */
+   Everything is scoped under .cap-stage so it can't leak into the rest of the app.
+   Colours are only taken from the animation's 32-colour palette (PAL in recognitionAnimation.js);
+   panels are drawn like the GBA games' menus: solid fills, a black outline and a light inner ring. */
 .cap-stage {
-    --stage: #0e1726;
-    --panel: rgba(20, 32, 52, .94); /* the bigger planes pass behind the caption; keep it readable */
-    --line: #2a3b58;
-    --text: #e9eef7;
-    --muted: #9aabc4;
-    --accent: #ff4d4d;
-    --win: #ffd45a;
+    --stage: #222034; /* night */
+    --panel: #222034; /* night */
+    --panel-head: #3f3f74; /* indigo */
+    --ink: #000000;
+    --ring: #5b6ee1; /* royal */
+    --line: #3f3f74; /* indigo */
+    --text: #ffffff;
+    --muted: #cbdbfc; /* mist */
+    --accent: #d95763; /* rose */
+    --win: #fbf236; /* yellow */
+    --pixel: Silkscreen, "Atkinson Hyperlegible", system-ui, sans-serif; /* headings, labels, buttons */
     position: fixed;
     inset: 0;
     z-index: 50;
@@ -29,51 +35,73 @@
     height: 100%;
 }
 
+/* drawn at low resolution and blown up without smoothing, for the pixel look */
+.cap-stage canvas.pixelated {
+    image-rendering: pixelated;
+}
+
 .cap-flash {
     position: absolute;
     inset: 0;
-    background: #fff;
+    background: #ffffff;
     opacity: 0;
     pointer-events: none;
 }
 
+/* a GBA menu box: black outline, a coloured ring inside it, then the fill */
+.cap-caption, .cap-bars {
+    background: var(--panel);
+    border: 3px solid var(--ink);
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 3px var(--ring), 0 0 0 3px var(--muted);
+}
+
 .cap-caption {
     position: absolute;
-    top: 16px;
-    left: 16px;
-    max-width: min(440px, calc(100% - 32px));
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 14px 16px;
+    top: 19px;
+    left: 19px;
+    max-width: min(440px, calc(100% - 38px));
+    padding: 0 0 14px;
+    overflow: hidden;
+}
+
+/* title bar across the top of the box, like "POKéMON INFO" */
+.cap-caption h1, .cap-bars h2 {
+    margin: 0;
+    padding: 8px 16px 6px;
+    background: var(--panel-head);
+    border-bottom: 3px solid var(--ring);
+    font-family: var(--pixel);
+    font-weight: 700;
+    text-shadow: 2px 2px 0 var(--ink);
 }
 
 .cap-caption h1 {
-    font-size: 1.25rem;
-    margin: 0 0 4px;
-    font-weight: 700;
+    font-size: 1.15rem;
 }
 
 .cap-caption p {
-    margin: 0;
+    margin: 10px 16px 0;
     color: var(--muted);
 }
 
+/* progress through the steps as a row of blocks */
 .cap-steps {
     display: flex;
-    gap: 6px;
-    margin-top: 10px;
+    gap: 4px;
+    margin: 12px 16px 0;
 }
 
 .cap-steps span {
-    height: 4px;
+    height: 8px;
     flex: 1;
-    border-radius: 2px;
-    background: var(--line);
+    background: var(--ink);
+    border: 2px solid var(--line);
 }
 
 .cap-steps span.on {
-    background: var(--text);
+    background: var(--win);
+    border-color: var(--ink);
 }
 
 .cap-bars {
@@ -81,44 +109,45 @@
     right: 4%;
     top: 50%;
     transform: translateY(-50%);
-    width: min(340px, 34vw);
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 14px 16px;
+    width: min(360px, 36vw);
+    padding: 0 0 12px;
+    overflow: hidden;
     opacity: 0;
 }
 
 .cap-bars h2 {
-    font-size: 1rem;
-    margin: 0 0 10px;
-    font-weight: 700;
+    font-size: .95rem;
+    margin-bottom: 6px;
 }
 
 .cap-bars .cap-empty {
-    margin: 0;
+    margin: 8px 16px 0;
     color: var(--muted);
 }
 
 .cap-row {
     display: grid;
-    grid-template-columns: 88px 1fr 44px;
+    grid-template-columns: 92px 1fr 46px;
     gap: 8px;
     align-items: center;
-    margin: 6px 0;
-    font-size: .95rem;
+    margin: 8px 16px;
+    font-size: 1rem;
 }
 
 .cap-row > span:first-child {
+    font-family: var(--pixel);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
+/* the bars are HP bars: a black track in a grey case */
 .cap-track {
-    height: 12px;
-    background: #0a1220;
-    border-radius: 6px;
+    height: 14px;
+    padding: 2px;
+    background: var(--ink);
+    border: 2px solid #595652; /* stone */
+    border-radius: 7px;
     overflow: hidden;
 }
 
@@ -126,15 +155,12 @@
     height: 100%;
     width: 0;
     background: var(--muted);
-    border-radius: 6px;
-}
-
-.cap-row.win .cap-fill {
-    background: var(--win);
+    border-radius: 3px;
 }
 
 .cap-row.win {
     font-weight: 700;
+    color: var(--win);
 }
 
 .cap-pct {
@@ -145,40 +171,57 @@
 
 .cap-controls {
     position: absolute;
-    right: 16px;
-    bottom: 16px;
+    right: 19px;
+    bottom: 19px;
     display: flex;
-    gap: 8px;
+    gap: 10px;
 }
 
+/* pill buttons after the type badges: black outline, light ring, spaced capitals */
 .cap-controls button {
-    font: inherit;
+    font: 700 .9rem/1.2 var(--pixel);
+    letter-spacing: .08em;
+    text-transform: uppercase;
     color: var(--text);
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 8px 14px;
+    text-shadow: 2px 2px 0 var(--ink);
+    background: #595652; /* stone */
+    border: 3px solid var(--ink);
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 2px var(--muted);
+    padding: 7px 18px 6px;
     cursor: pointer;
 }
 
 .cap-controls button:hover {
-    border-color: var(--muted);
+    background: var(--ring);
+}
+
+.cap-controls button[data-act="close"] {
+    background: #ac3232; /* red */
+}
+
+.cap-controls button[data-act="close"]:hover {
+    background: var(--accent);
 }
 
 .cap-controls button:focus-visible {
-    outline: 2px solid var(--win);
+    outline: 3px solid var(--win);
     outline-offset: 2px;
 }
 
+/* the raw dex data, on a dark green handheld screen */
 .cap-info {
     position: absolute;
-    inset: 16px 16px 72px;
+    inset: 19px 19px 76px;
     margin: 0;
     overflow: auto;
     z-index: 1;
-    background: #000;
-    color: #0f0;
-    padding: 12px;
+    background: #323c39; /* slate */
+    color: #99e550; /* lime */
+    border: 3px solid var(--ink);
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 3px #4b692f; /* moss */
+    padding: 14px;
     font: 13px/1.4 monospace;
     white-space: pre-wrap;
 }
@@ -193,20 +236,46 @@
     right: 16px;
     z-index: 10;
     pointer-events: none;
-    background: rgba(0, 0, 0, .8);
-    color: #0f0;
+    background: var(--ink);
+    color: #99e550; /* lime */
     padding: 4px 8px;
     border-radius: 4px;
     font: 14px/1.3 monospace;
     white-space: pre;
 }
 
+/* debug-only slider for the dither strength, under the frame counter */
+.cap-dither {
+    position: absolute;
+    top: 50px;
+    right: 16px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--ink);
+    color: #99e550; /* lime */
+    padding: 4px 8px;
+    border-radius: 4px;
+    font: 14px/1.3 monospace;
+}
+
+.cap-dither input {
+    width: 140px;
+    accent-color: #99e550; /* lime */
+}
+
+.cap-dither output {
+    min-width: 3ch;
+    font-variant-numeric: tabular-nums;
+}
+
 @media (max-aspect-ratio: 9/10) {
     .cap-bars {
         top: auto;
-        bottom: 72px;
-        left: 16px;
-        right: 16px;
+        bottom: 76px;
+        left: 19px;
+        right: 19px;
         width: auto;
         transform: none;
     }

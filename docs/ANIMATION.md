@@ -35,8 +35,21 @@ polish work without re-reading the history.
   so scrubbing backwards is exact. Keep it that way (no state accumulated across frames).
 - The user screenshots paused frames, draws on them, and pastes them in. Map their frame/time
   to the timeline constants below. Set `DEBUG = false` before any demo.
+- With `DEBUG` on, a **dither slider** sits under the counter and changes the dither live (copy
+  the value you like into `DITHER`). Arrow keys move the slider, not the frame, while it's focused.
 - Verify changes with `npx vite build` in `frontend/` (there's no visual test). `npx eslint` on
   this file fails to parse `??` (pre-existing config issue), so don't rely on it.
+- **Checking the look yourself** (worked well during the retheme): make a throwaway
+  `frontend/preview-tmp/index.html` that imports `/src/capture/recognitionAnimation.js`, draws a
+  stand-in photo on a canvas, calls `playCaptureAnimation(document.body, {frame, normalised: frame,
+  scores: [...], onClose() {}})`, then on the next animation frame dispatches a Space keydown
+  (pause) and N Shift+ArrowRight keydowns (step N seconds). Run `npx vite --port 5199` and
+  screenshot with headless Chrome:
+  `chrome.exe --headless=new --use-angle=swiftshader --enable-unsafe-swiftshader
+  --window-size=1280,720 --virtual-time-budget=5000 --screenshot=out.png
+  "http://localhost:5199/preview-tmp/index.html?t=33"`.
+  Then read the PNG. Stop the server and delete `preview-tmp` afterwards; never leave it in the repo.
+  Web fonts may not have loaded in time for canvas text in these shots (they fall back to Atkinson).
 
 ## Structure of `recognitionAnimation.js`
 
@@ -48,18 +61,30 @@ Top of file, in order:
    `SPLIT`, `NORM`, `MERGE`, `DROP`/`LAND`, `STOPS[]`, `DESK_T`, `VOTE_CAM`, `COUNT`, `VOTE_END`,
    `RETURN`, `SCORES_T`, `BARS`, `RESULT`, `END`) are what the render code uses. `STEPS` holds the
    caption text per step.
-2. **Scene constants**: photo/plane sizes (`PHOTO`, `PLANE`, `GROW`), colours (`LCOL` per station,
+2. **Look** (see "Visual theme" below for the rules behind it):
+   - `PAL`: the 32-colour palette (DawnBringer 32), by name. Every colour comes from here.
+   - `ADJUSTED`: the only colours added on top of `PAL`, with the user's permission: darkened
+     shades for the factory floor so the workers and belt stand out. Named after the `PAL` colour
+     they come from (`seaDark`, …).
+   - `PIXEL` (screen pixels per rendered pixel; 1 turns the pixel look off), `PALETTE_LOCK` (the
+     post pass that snaps every pixel of the 3D scene to `PAL` + `ADJUSTED`) and `DITHER` (4×4
+     ordered-dither strength for that snap). The user set `PIXEL = 2`, `DITHER = 0.05`.
+   - `FONT`: the pixel font (Silkscreen) for text drawn into canvases in the scene. Canvas text
+     goes through `textTexture()`, which redraws once the web font has loaded.
+3. **Scene constants**: photo/plane sizes (`PHOTO`, `PLANE`, `GROW`), colours (`LCOL` per station,
    `GUESS_COL` per top guess, which also colours the score bars), the instant camera, belt
    geometry (`FLOOR = -9`, the belt stage sits far below the photo), `STATION_X`, `START_X`,
    `DESK_X`, `SHEET_SCALES`, `STROKE_W`, belt camera (`CAM_EL`, `CAM_YAW`, `CAM_FOV`), vote camera
    (`CAM_VOTE_EL`, `VOTE_FRAME`), `FLOOR_FADE` / `FLOOR_FADE_SOFT` (oval floor fade), `SECTION_NAMES`,
-   `LAMP_H`, `TAPE`, worker look (`WORKER_SCALE`, `SKIN`, `SHIRT`, `OVERALLS`, `HAT`).
-3. **Helpers**: `cutout()` (flat alpha-to-coverage planes for the 2.5D workers), `makeWorker()`
+   `SECTION_FLOOR` / `SECTION_BADGE` / `FLOOR_GRID` / `TAPE_COL` (the dimmed floor colours),
+   `LAMP_H`, `TAPE`, worker look (`WORKER_SCALE`, `SKIN`, `SHIRT`, `OVERALLS`, `HAT`,
+   `FOREMAN_HAT`, `INK` for outlines, `WORKER_LIGHT` for how the lamps light them).
+4. **Helpers**: `cutout()` (flat alpha-to-coverage planes for the 2.5D workers), `makeWorker()`
    (detached body/head/hands/feet; the pencil hand is separate so it can reach the sheet; the
    foreman has a clipboard), `makeStrokes()` (the marks are derived from the captured image:
    Sobel edges, randomised curves, busy-region shapes, and parts boxes shared between guesses by
    score via `shareOut`).
-4. **`playCaptureAnimation()`**: builds the DOM and scene, then `render(t)` sets everything for time
+5. **`playCaptureAnimation()`**: builds the DOM and scene, then `render(t)` sets everything for time
    `t`. Key pieces inside:
    - `placeCamera(t, sheetX)`: blends front view → belt view (`k`, over `DROP`, back over
      `RETURN`) → vote close-up (`v`, over `VOTE_CAM`). The belt view is a narrow-FOV perspective
@@ -73,6 +98,13 @@ Top of file, in order:
      the drop, out at the end of the return), and floor paint uses the `oval()` shader patch.
    - Votes: sprites flying from the parts boxes to just in front of the clipboard (`depthTest`
      off). The foreman's speech-bubble lines are in `lines` (timed to votes landing).
+   - Palette pass: `sceneTarget` (low-res render target) → `palPass` (full-screen quad whose
+     shader picks the nearest colour from `snapTo` = `PAL` + `ADJUSTED`, "redmean" distance, Bayer
+     dither). `render(t)` ends by drawing the scene into the target, then the pass to the canvas.
+     The canvas is stretched with CSS `image-rendering: pixelated` (`.pixelated` class).
+   - `lampLit(mat)`: shader patch on every worker material (applied in `addWorker`). Brightness
+     comes from the pixel's world position: near a lamp (`lampXZ`) and high up = bright.
+   - `oval(mat)`: shader patch that fades floor paint out in an oval around the belt.
 
 ## The story, in order
 
@@ -85,7 +117,51 @@ with a pen in that guess's colour) → foreman counts the votes ("Right!", "1…
 "…149, 150, 151!", "Gotta count 'em all!") → camera returns to the front → score bars → normalised
 image rises up with its name.
 
+## Visual theme (Pokémon / GBA retheme, October 2026)
+
+The user asked for a Pokémon-inspired look on a dark background, limited to a palette they
+supplied (DawnBringer 32, now `PAL`). Their mood board: type badges (pill shapes, outlined
+spaced-out lettering), Game Boy controls, the FireRed/LeafGreen PC-box and summary screens (panels
+with thick borders and title bars, HP bars), purple/indigo night pixel art, and the Haunter and
+Snorlax posters (grid backgrounds; "it doesn't have to be all pixellated"). They like the
+construction workers but said that's open to change.
+
+What the retheme did, all as restyles of parts that already existed:
+
+- Whole 3D scene rendered low-res and palette-locked with dithering (see Look above).
+- Instant camera painted like a Poké Ball; the photo's back is a trading-card back with a Poké Ball.
+- Square "pixel" dots on the channel planes and the sheet; sprite-style black outlines on marks,
+  workers, votes and the speech bubble instead of glows.
+- Workers: Poké Ball hard hats, Master Ball for the foreman, brown boots, palette skin and clothes.
+  Lit by the lamps (`WORKER_LIGHT`; `top` above ~1.1 pushes brown skin to red).
+- Floor: dimmed (`ADJUSTED`) so the belt and workers are the focus. Section names are painted as
+  type badges (EDGES ice, CURVES grass, SHAPES electric, PARTS psychic, THE VOTE normal). Floor tape
+  is dimmed; the tape up the belt sides stays full yellow on purpose.
+- Speech bubble is a game dialog box (white, black/blue/black border, grey text with a shadow).
+- Overlay (CSS): GBA menu panels with title bars, step progress as blocks, scores as HP bars,
+  pill buttons after the type badges, "Show data" on a dark green handheld screen. Result name is
+  on a name plate sprite (the old plain text was unreadable once pixelated).
+- Fonts: Silkscreen for headings, labels, buttons and in-scene text; Atkinson Hyperlegible for
+  body text and numbers. Pixelify Sans was tried and dropped: at caption size "C" read as "O",
+  "5" as "S", and "fi" ligated into "A".
+
+Rules for further theming work:
+
+- **Only `PAL` colours.** New colours only with the user's say-so, and then go in `ADJUSTED`,
+  named after their source colour. Anything not in `PAL` + `ADJUSTED` gets snapped away by the
+  palette lock anyway (CSS isn't snapped, so keep CSS colours on-palette by hand, with a comment
+  naming the colour).
+- **Remix, don't add.** The user said not to add new steps or new elements, only restyle what's
+  there, unless they ask.
+- Watch readability after pixelation: small canvas text in the scene needs to be big or on a
+  plate to survive `PIXEL`.
+- **Snapping also affects the photo** and channel planes, so adding colours to `ADJUSTED` changes
+  them slightly too.
+
 ## User preferences and working conventions
+
+- **Never commit** (the user said so explicitly for this work). Leave changes in the working tree;
+  only provide a commit message if asked.
 
 - **Ask instead of guessing** when a note is ambiguous. The user said so explicitly.
 - The user tunes values themselves (they've edited `TIMING`, the foreman's lines and the tape
@@ -97,7 +173,11 @@ image rises up with its name.
 - **IntelliJ caveat**: the file is usually open in the IDE. If the IDE warns about "file system vs
   memory", the user should *Load File System Changes*. Keeping the in-memory copy once wiped the
   file. After big edits, grep for a few markers to confirm the disk copy is whole.
-- The file is LF; the CSS is CRLF. Diffs that look identical are usually just line endings.
+- Line endings: the repo stores both files as LF (`text=auto`); the working copies are CRLF. Keep
+  whatever the working copy has (the CSS was converted back to CRLF after a full rewrite). Diffs
+  that look identical are usually just line endings.
+- The user often edits the file in the IDE while a session is running ("file modified on disk"
+  warnings). Re-read the area before every edit.
 
 ## Open items
 
@@ -108,6 +188,13 @@ image rises up with its name.
   The user hasn't seen it yet.
 - **Recent untested changes**: the vote timing (votes wait for the camera, counts at 85% of each
   flight, `countLine` and `jokeLine`), and the cable and floor fade-out at the end of the return.
+- **Retheme state (16 Oct 2026)**: done and liked by the user, all **uncommitted** in
+  `recognitionAnimation.js`, `recognitionAnimation.css` and this doc. The user plans more changes
+  in the next session; nothing specific yet. Offered but not taken up: making the floor tape match
+  the belt-side tape (`sideTape` → `TAPE_COL`), and keeping the photo snapped to `PAL` only rather
+  than `PAL` + `ADJUSTED`.
+- Canvas text drawn before the pixel font loads (badges, bubble, name plate) is redrawn once it
+  loads; this hasn't been confirmed in a real browser, only in headless shots where it fell back.
 - The user mentioned "more things" planned after this core polish; nothing specific yet.
 
 ## Future idea: "How does it actually see?" FAQ page

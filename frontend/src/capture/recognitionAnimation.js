@@ -34,11 +34,11 @@ const DEBUG_FPS = 60; // playback is time-based; the frame number is just t at t
 const TIMING = {
     // the photo
     cameraIn: 0.28, // instant camera pops in
-    beforeFlash: 0.1, // wait before the flash goes off
-    flash: 0.21, // the flash itself
-    eject: 0.7, // photo slides out of the slot, face down
+    beforeFlash: 0.2, // wait before the flash goes off
+    flash: 0.61, // the flash itself
+    eject: 3, // photo slides out of the slot, face down
     cameraFade: 0.35, // camera fades away
-    flip: 0.84, // photo flips over into place
+    flip: 2, // photo flips over into place
     // locate and crop
     beforeCrop: 0.95,
     crop: 0.84, // detection box zooms in and settles
@@ -124,22 +124,50 @@ const STEPS = [
 ];
 const MAX_SCORE_ROWS = 4;
 
+// ---------- look ----------
+// Everything is drawn from this 32-colour palette (DawnBringer 32). The 3D scene is rendered at
+// low resolution and every pixel is snapped to the nearest palette colour, so blends, glows and
+// the photo itself all come out in it, like a GBA screen.
+const PAL = {
+    black: '#000000', night: '#222034', plum: '#45283c', umber: '#663931', rust: '#8f563b',
+    orange: '#df7126', tan: '#d9a066', peach: '#eec39a', yellow: '#fbf236', lime: '#99e550',
+    green: '#6abe30', teal: '#37946e', moss: '#4b692f', olive: '#524b24', slate: '#323c39',
+    indigo: '#3f3f74', sea: '#306082', royal: '#5b6ee1', sky: '#639bff', ice: '#5fcde4',
+    mist: '#cbdbfc', white: '#ffffff', steel: '#9badb7', mauve: '#847e87', iron: '#696a6a',
+    stone: '#595652', violet: '#76428a', red: '#ac3232', rose: '#d95763', pink: '#d77bba',
+    khaki: '#8f974a', bronze: '#8a6f30',
+};
+// ADJUSTED: not in the original palette. Darkened shades of PAL colours (named after the colour they
+// come from) for the factory floor only, so the floor sits back and the workers and belt stand out.
+// The palette lock snaps to these too.
+const ADJUSTED = {
+    seaDark: '#1d3a4e', mossDark: '#2d3f1c', oliveDark: '#312d16', plumDark: '#2d1a27',
+    umberDark: '#3d221d', indigoDark: '#2c2a4a', iceDark: '#2f6672', limeDark: '#4c7228',
+    yellowDark: '#7d791b', pinkDark: '#6b3d5d', mistDark: '#656d7e',
+};
+const PIXEL = 2; // size of one rendered pixel, in screen pixels; 1 turns the pixel look off
+const PALETTE_LOCK = true; // snap the 3D scene to PAL; false shows the raw colours
+const DITHER = 0.05; // strength of the ordered dither used when snapping; 0 = flat bands
+const FONT = 'Silkscreen, "Atkinson Hyperlegible", system-ui, sans-serif'; // pixel font for text drawn in the scene
+
 // ---------- scene constants ----------
 const PHOTO = 6.6; // longest side of the photo plane, world units
 const PY = 0.3;
 const PLANE = 3.6; // longest side of the channel planes once lifted off the photo
 const GROW = PLANE / 2.25; // how much bigger the planes are than the original explainer's
 const GRID = 40; // channel grid resolution along a square crop
-const CHAN = [[0, 0, 1], [0, 1, 0], [1, 0, 0]]; // B, G, R (OpenCV order)
-const LCOL = ['#5ad1ff', '#7dff9b', '#ffd45a', '#ff7ad9'];
+// B, G, R (OpenCV order), tinted towards the palette's blue, green and red
+const CHAN = [[0.39, 0.61, 1], [0.6, 0.9, 0.31], [0.85, 0.34, 0.39]];
+// one per station, after the type badges: ice, grass, electric, psychic
+const LCOL = [PAL.ice, PAL.lime, PAL.yellow, PAL.pink];
 // one per top guess, winner first; the score bars use the same colours
-const GUESS_COL = ['#ff5a5a', '#ff9f1c', '#b78cff', '#3fe0c5'];
+const GUESS_COL = [PAL.rose, PAL.orange, PAL.sky, PAL.teal];
 const PART_MARKS = 8; // parts shared out between the guesses by score
 const CARD = 3.4; // longest side of the final normalised image
 
 // the instant camera at the start
-const CAMW = 2.6;
-const CAMH = 1.95;
+const CAMW = 5.2;
+const CAMH = 3.9;
 const CAM_Y = PY + 1;
 const EJECT_W = CAMW * 0.6; // photo width while it comes out of the slot
 
@@ -166,18 +194,32 @@ const CAM_VOTE_EL = 0.42; // a little flatter while the foreman counts, so we lo
 const VOTE_FRAME = 3; // how much height the vote shot frames, in world units; smaller = tighter
 // the painted floor fades out in an oval around the belt so tape and floor don't run off to the
 // horizon: [radius along the belt, radius across it], and how soft the edge is. Equal radii = circle
-const FLOOR_FADE = [19, 7];
-const FLOOR_FADE_SOFT = 3;
-const SECTION_NAMES = ['EDGES', 'CURVES', 'SHAPES', 'PARTS', 'THE VOTE']; // painted on the floor
+const FLOOR_FADE = [23, 10];
+const FLOOR_FADE_SOFT = 4;
+const SECTION_NAMES = ['EDGES', 'CURVES', 'SHAPES', 'PARTS', 'THE VOTE']; // painted on the floor as type badges
+// each section's floor, a dark shade of its badge colour
+const SECTION_FLOOR = [ADJUSTED.seaDark, ADJUSTED.mossDark, ADJUSTED.oliveDark, ADJUSTED.plumDark, ADJUSTED.umberDark];
+// the floor's badge colours, darker than the station colours the workers draw in (LCOL)
+const SECTION_BADGE = [ADJUSTED.iceDark, ADJUSTED.limeDark, ADJUSTED.yellowDark, ADJUSTED.pinkDark, ADJUSTED.mistDark];
+const FLOOR_GRID = ADJUSTED.indigoDark;
+const TAPE_COL = ADJUSTED.yellowDark; // the hazard tape's yellow
 const LAMP_H = 3.4; // how high the overhead lamps hang above the belt
 const TAPE = 0.25; // width of the hazard tape between sections
 
 // ---------- worker look ----------
 const WORKER_SCALE = 1.9;
-const SKIN = ['#e3b08a', '#c98f62', '#8f5d3e', '#f2cfae'];
-const SHIRT = ['#ffb03b', '#f4d03f', '#ff8a5c'];
-const OVERALLS = ['#3e6ad6', '#2b9a8c', '#6a5acd'];
-const HAT = '#ffd23f';
+const SKIN = [PAL.peach, PAL.tan, PAL.rust, PAL.umber];
+const SHIRT = [PAL.orange, PAL.yellow, PAL.rose];
+const OVERALLS = [PAL.sea, PAL.teal, PAL.royal];
+// hard hats painted like balls: [top, spots]. Workers get Poké Balls, the foreman a Master Ball
+const HAT = [PAL.red, null];
+const FOREMAN_HAT = [PAL.violet, PAL.pink];
+const INK = PAL.black; // outlines
+// how the overhead lamps light the workers: brightness right under a lamp at hat height (`top`),
+// at their feet (`feet`), and well away from any lamp (`away`); 1 = the colours as drawn.
+// `reach` is how far from under a lamp the light stays full, in world units (it fades out over the
+// next unit); the workers at a station stand about 1.3 from their lamp
+const WORKER_LIGHT = {top: 1.1, feet: 0.75, away: 0.55, reach: 1.5}; // top above ~1.1 shifts browns towards red
 
 /*
 * Crop rectangle in source pixels: the bounding box of the detection quad, or a centred square
@@ -247,6 +289,20 @@ function canvasTexture(w, h, draw) {
     return new THREE.CanvasTexture(c);
 }
 
+// canvas text needs the pixel font: draw straight away with whatever is loaded, then again once it is
+function textTexture(w, h, draw) {
+    const tex = canvasTexture(w, h, draw);
+    document.fonts?.load(`700 40px ${FONT}`).then(() => {
+        const x = tex.image.getContext('2d');
+        x.globalCompositeOperation = 'source-over';
+        x.globalAlpha = 1;
+        x.clearRect(0, 0, w, h);
+        draw(x, w, h);
+        tex.needsUpdate = true;
+    }, () => {});
+    return tex;
+}
+
 /*
 * Flat cut-out for the 2.5D workers: depth-tested like a cardboard standee, with
 * alpha-to-coverage so the edges stay smooth without needing back-to-front sorting.
@@ -264,34 +320,47 @@ function disc(x, cx, cy, r, color) {
     x.fill();
 }
 
-// a simple line-drawn instant camera, after the reference but with less going on
+// a simple line-drawn instant camera, painted like a Poké Ball: red top, black band, white bottom,
+// and the lens where the ball's button would be
 function drawInstantCamera(x, w, h) {
-    x.lineWidth = 10;
+    x.lineWidth = 12;
     x.lineJoin = 'round';
-    x.strokeStyle = '#2b2b2b';
-    x.fillStyle = '#c0392b';
+    x.strokeStyle = INK;
+    x.fillStyle = PAL.yellow;
     x.fillRect(w - 130, 14, 56, 30); // shutter button
     x.strokeRect(w - 130, 14, 56, 30);
-    x.fillStyle = '#f4f1ea';
+    x.save();
     x.beginPath();
     x.roundRect(16, 40, w - 32, h - 56, 36);
-    x.fill();
-    x.stroke();
+    x.clip();
+    x.fillStyle = PAL.white;
+    x.fillRect(0, 0, w, h);
+    x.fillStyle = PAL.mist;
+    x.fillRect(0, h - 70, w, 70); // shade along the bottom
+    x.fillStyle = PAL.red;
+    x.fillRect(0, 0, w, 118);
+    x.fillStyle = PAL.rose;
+    x.fillRect(0, 40, w, 14); // highlight along the top
+    x.restore();
     x.beginPath();
-    x.moveTo(16, 118);
-    x.lineTo(w - 16, 118);
+    x.roundRect(16, 40, w - 32, h - 56, 36);
     x.stroke();
-    x.fillStyle = '#2b2b2b';
+    x.fillStyle = INK;
+    x.fillRect(16, 112, w - 32, 16); // the band
+    x.fillStyle = PAL.night;
     x.fillRect(56, 64, 84, 40); // viewfinder
-    x.fillStyle = '#fff';
+    x.strokeRect(56, 64, 84, 40);
+    x.fillStyle = PAL.white;
     x.fillRect(w - 156, 62, 96, 44); // flash
     x.strokeRect(w - 156, 62, 96, 44);
-    disc(x, w / 2, h * 0.56, 104, '#2b2b2b');
-    disc(x, w / 2, h * 0.56, 82, '#f4f1ea');
-    disc(x, w / 2, h * 0.56, 64, '#2b2b2b');
-    disc(x, w / 2, h * 0.56, 30, '#4a5d82');
-    disc(x, w / 2 - 12, h * 0.56 - 12, 9, '#fff');
-    x.fillStyle = '#2b2b2b';
+    disc(x, w / 2, h * 0.56, 104, INK);
+    disc(x, w / 2, h * 0.56, 82, PAL.white);
+    disc(x, w / 2, h * 0.56, 64, INK);
+    disc(x, w / 2, h * 0.56, 46, PAL.sea);
+    disc(x, w / 2, h * 0.56, 30, PAL.sky);
+    x.fillStyle = PAL.white;
+    x.fillRect(w / 2 - 22, h * 0.56 - 22, 14, 14); // glint
+    x.fillStyle = INK;
     x.fillRect(w * 0.18, h - 44, w * 0.64, 12); // slot
 }
 
@@ -318,33 +387,57 @@ function makeWorker(n, {pencil = null, clipboard = false, hat = HAT} = {}) {
         x.fillRect(w * 0.3, h * 0.36, w * 0.4, h * 0.2); // bib
         x.fillRect(w * 0.24, h * 0.08, w * 0.09, h * 0.45); // straps
         x.fillRect(w * 0.67, h * 0.08, w * 0.09, h * 0.45);
-        x.fillStyle = 'rgba(0,0,0,.18)';
+        x.fillStyle = INK;
         x.fillRect(w * 0.4, h * 0.42, w * 0.2, h * 0.09); // pocket
         x.restore();
+        x.strokeStyle = INK;
+        x.lineWidth = 7;
+        x.beginPath();
+        x.ellipse(w / 2, h / 2, w / 2 - 5, h / 2 - 5, 0, 0, Math.PI * 2);
+        x.stroke();
     });
     body.userData.base = [0, 0.3, 0.002];
 
+    const [hatTop, hatSpots] = hat;
     const head = cutout(0.34, 0.34, (x, w, h) => {
-        disc(x, w / 2, h * 0.58, w * 0.34, skin);
-        x.fillStyle = hat;
+        disc(x, w / 2, h * 0.58, w * 0.34 + 4, INK);
+        disc(x, w / 2, h * 0.58, w * 0.34 - 2, skin);
+        // the hard hat: a ball's top half for the dome, its black band and white half as the brim
+        x.fillStyle = INK;
+        x.beginPath();
+        x.arc(w / 2, h * 0.48, w * 0.36 + 5, Math.PI, 0);
+        x.fill();
+        x.fillRect(w * 0.06 - 5, h * 0.42, w * 0.88 + 10, h * 0.12);
+        x.fillStyle = hatTop;
         x.beginPath();
         x.arc(w / 2, h * 0.48, w * 0.36, Math.PI, 0);
         x.fill();
-        x.fillRect(w * 0.06, h * 0.44, w * 0.88, h * 0.08); // brim
-        x.fillStyle = 'rgba(255,255,255,.35)';
-        x.fillRect(w * 0.46, h * 0.14, w * 0.08, h * 0.3); // ridge
+        if (hatSpots) {
+            disc(x, w * 0.3, h * 0.36, w * 0.07, hatSpots);
+            disc(x, w * 0.7, h * 0.36, w * 0.07, hatSpots);
+        }
+        x.fillStyle = PAL.white;
+        x.fillRect(w * 0.06, h * 0.47, w * 0.88, h * 0.05); // brim
+        disc(x, w / 2, h * 0.43, w * 0.09, INK); // the ball's button
+        disc(x, w / 2, h * 0.43, w * 0.05, PAL.white);
+        x.fillRect(w * 0.34, h * 0.18, w * 0.08, h * 0.08); // shine
     });
     head.userData.base = [0, 0.64, 0.004];
 
     const hand = (dx) => {
-        const m = cutout(0.12, 0.12, (x, w) => disc(x, w / 2, w / 2, w / 2 - 2, skin), 32);
+        const m = cutout(0.12, 0.12, (x, w) => {
+            disc(x, w / 2, w / 2, w / 2 - 2, INK);
+            disc(x, w / 2, w / 2, w / 2 - 6, skin);
+        }, 32);
         m.userData.base = [dx, 0.3, 0.006];
         return m;
     };
     const foot = (dx) => {
         const m = cutout(0.13, 0.07, (x, w, h) => {
-            x.fillStyle = '#1d2433';
+            x.fillStyle = INK;
             x.fillRect(0, 0, w, h);
+            x.fillStyle = PAL.umber; // work boots
+            x.fillRect(3, 3, w - 6, h - 6);
         }, 32);
         m.userData.base = [dx, 0.035, 0];
         return m;
@@ -360,13 +453,13 @@ function makeWorker(n, {pencil = null, clipboard = false, hat = HAT} = {}) {
             x.save();
             x.translate(16, 112);
             x.rotate(-Math.PI / 4);
-            x.fillStyle = '#2b2b2b';
+            x.fillStyle = INK;
             x.beginPath();
             x.moveTo(0, 0);
             x.lineTo(9, -4);
             x.lineTo(9, 4);
             x.fill(); // lead
-            x.fillStyle = '#f0d2a0';
+            x.fillStyle = PAL.peach;
             x.beginPath();
             x.moveTo(9, -4);
             x.lineTo(24, -8);
@@ -375,10 +468,14 @@ function makeWorker(n, {pencil = null, clipboard = false, hat = HAT} = {}) {
             x.fill(); // wood
             x.fillStyle = pencil;
             x.fillRect(24, -8, 70, 16);
-            x.fillStyle = '#ff9eb5';
+            x.fillStyle = PAL.pink;
             x.fillRect(94, -8, 12, 16); // rubber
+            x.strokeStyle = INK;
+            x.lineWidth = 3;
+            x.strokeRect(24, -8, 82, 16);
             x.restore();
-            disc(x, 86, 42, 20, skin);
+            disc(x, 86, 42, 22, INK);
+            disc(x, 86, 42, 18, skin);
         });
         // put the pencil tip at the mesh origin so positioning the hand positions the tip
         drawHand.geometry.translate(0.12, 0.12, 0);
@@ -387,13 +484,15 @@ function makeWorker(n, {pencil = null, clipboard = false, hat = HAT} = {}) {
     }
     if (clipboard) {
         const board = cutout(0.22, 0.28, (x, w, h) => {
-            x.fillStyle = '#9a6a3f';
+            x.fillStyle = INK;
             x.fillRect(0, 0, w, h);
-            x.fillStyle = '#f4f1e8';
+            x.fillStyle = PAL.rust;
+            x.fillRect(4, 4, w - 8, h - 8);
+            x.fillStyle = PAL.white;
             x.fillRect(w * 0.12, h * 0.14, w * 0.76, h * 0.8);
-            x.fillStyle = '#b8c0cc';
-            for (let k = 0; k < 4; k += 1) x.fillRect(w * 0.2, h * (0.3 + k * 0.15), w * 0.6, 3);
-            x.fillStyle = '#c9ced6';
+            x.fillStyle = PAL.steel;
+            for (let k = 0; k < 4; k += 1) x.fillRect(w * 0.2, h * (0.3 + k * 0.15), w * 0.6, 4);
+            x.fillStyle = PAL.mauve;
             x.fillRect(w * 0.35, 0, w * 0.3, h * 0.12);
         });
         // in the hand on the side away from the belt, so it can't poke into it
@@ -602,7 +701,9 @@ export function playCaptureAnimation(container, {
             <button type="button" data-act="close">Close</button>
         </div>
         <pre class="cap-info" hidden></pre>
-        ${DEBUG ? '<div class="cap-debug"></div>' : ''}`;
+        ${DEBUG ? '<div class="cap-debug"></div>' : ''}
+        ${DEBUG && PALETTE_LOCK ? `<label class="cap-dither">dither
+            <input type="range" min="0" max="0.4" step="0.01" value="${DITHER}"><output></output></label>` : ''}`;
     container.appendChild(root);
     const debugEl = root.querySelector('.cap-debug');
     const flashEl = root.querySelector('.cap-flash');
@@ -643,13 +744,77 @@ export function playCaptureAnimation(container, {
 
     // ---------- three setup ----------
     const canvas = root.querySelector('canvas');
-    const renderer = new THREE.WebGLRenderer({canvas, antialias: true});
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // with the pixel look on, the canvas is drawn at a fraction of the screen's resolution and
+    // stretched back up without smoothing (see .cap-stage canvas in the CSS)
+    const pixelated = PIXEL > 1;
+    const renderer = new THREE.WebGLRenderer({canvas, antialias: !pixelated});
+    renderer.setPixelRatio(pixelated ? 1 : Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
-    renderer.setClearColor(0x0e1726);
+    renderer.setClearColor(PAL.night);
     renderer.localClippingEnabled = true; // lets the photo come out of the camera's slot
+    canvas.classList.toggle('pixelated', pixelated);
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+
+    // palette lock: the scene is drawn into a texture, then each pixel is swapped for the nearest
+    // palette colour, nudged by a 4x4 ordered dither so soft blends turn into patterns, not bands
+    const sceneTarget = PALETTE_LOCK ? new THREE.WebGLRenderTarget(1, 1, {
+        minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+    }) : null;
+    const snapTo = [...Object.values(PAL), ...Object.values(ADJUSTED)];
+    const palPass = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+        uniforms: {
+            tScene: {value: sceneTarget?.texture ?? null},
+            uPalette: {value: snapTo.map((c) => new THREE.Vector3(...new THREE.Color(c).toArray()))},
+            uDither: {value: DITHER},
+        },
+        vertexShader: `
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                gl_Position = vec4(position.xy, 0.0, 1.0);
+            }`,
+        fragmentShader: `
+            uniform sampler2D tScene;
+            uniform vec3 uPalette[${snapTo.length}];
+            uniform float uDither;
+            varying vec2 vUv;
+            const float BAYER[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
+            void main() {
+                ivec2 p = ivec2(mod(gl_FragCoord.xy, 4.0));
+                float d = (BAYER[p.x + p.y * 4] + 0.5) / 16.0 - 0.5;
+                vec3 c = texture2D(tScene, vUv).rgb + d * uDither;
+                vec3 best = uPalette[0];
+                float bestD = 1e9;
+                for (int i = 0; i < ${snapTo.length}; i++) {
+                    // "redmean" distance: closer to how different two colours look than plain RGB
+                    vec3 e = uPalette[i] - c;
+                    float r = (uPalette[i].r + c.r) * 0.5;
+                    float dist = (2.0 + r) * e.r * e.r + 4.0 * e.g * e.g + (3.0 - r) * e.b * e.b;
+                    if (dist < bestD) {
+                        bestD = dist;
+                        best = uPalette[i];
+                    }
+                }
+                gl_FragColor = vec4(best, 1.0);
+            }`,
+        depthTest: false,
+        depthWrite: false,
+    }));
+    palPass.frustumCulled = false;
+    // debug slider for the dither strength; copy the value you like into DITHER
+    const ditherInput = root.querySelector('.cap-dither input');
+    if (ditherInput) {
+        const ditherOut = root.querySelector('.cap-dither output');
+        ditherOut.textContent = DITHER.toFixed(2);
+        ditherInput.oninput = () => {
+            palPass.material.uniforms.uDither.value = Number(ditherInput.value);
+            ditherOut.textContent = Number(ditherInput.value).toFixed(2);
+        };
+    }
+    const palScene = new THREE.Scene();
+    palScene.add(palPass);
+    const palCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
     // ---------- the instant camera, and the photo it spits out ----------
     const instantMat = new THREE.MeshBasicMaterial({
@@ -673,12 +838,26 @@ export function playCaptureAnimation(container, {
     const photo = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), photoMat);
     photoRig.add(photo);
     const backMat = new THREE.MeshBasicMaterial({
+        // the back of a trading card: blue, with a Poké Ball in the middle
         map: canvasTexture(256, Math.round(256 / fa), (x, w, h) => {
-            x.fillStyle = '#e9e4d8';
+            x.fillStyle = PAL.indigo;
             x.fillRect(0, 0, w, h);
-            x.strokeStyle = '#cfc8b8';
-            x.lineWidth = 6;
-            x.strokeRect(10, 10, w - 20, h - 20);
+            x.fillStyle = PAL.sea;
+            x.fillRect(14, 14, w - 28, h - 28);
+            x.strokeStyle = PAL.royal;
+            x.lineWidth = 4;
+            x.strokeRect(14, 14, w - 28, h - 28);
+            const r = Math.min(w, h) * 0.24;
+            disc(x, w / 2, h / 2, r + 5, INK);
+            disc(x, w / 2, h / 2, r, PAL.white);
+            x.fillStyle = PAL.red;
+            x.beginPath();
+            x.arc(w / 2, h / 2, r, Math.PI, 0);
+            x.fill();
+            x.fillStyle = INK;
+            x.fillRect(w / 2 - r, h / 2 - 4, 2 * r, 8);
+            disc(x, w / 2, h / 2, r * 0.32, INK);
+            disc(x, w / 2, h / 2, r * 0.2, PAL.white);
         }),
         transparent: true,
         clippingPlanes: [slotClip],
@@ -700,25 +879,38 @@ export function playCaptureAnimation(container, {
     const cropC = new THREE.Vector3(((crop.x + crop.w / 2) / fw - 0.5) * PW, (0.5 - (crop.y + crop.h / 2) / fh) * PH + PY, 0,);
 
     // detection box (thick frame)
-    const boxMat = new THREE.MeshBasicMaterial({color: 0xff4d4d, transparent: true, opacity: 0});
+    const boxMat = new THREE.MeshBasicMaterial({color: PAL.rose, transparent: true, opacity: 0});
     const box = new THREE.Mesh(new THREE.ShapeGeometry(frameShape(cropW, cropH, 0.05)), boxMat);
     box.position.copy(cropC);
     box.position.z = 0.02;
     scene.add(box);
 
+    // a name plate: white text in a dark box with a border in the given colour, big enough to
+    // stay readable once the scene is pixelated
     function textSprite(text, color, w) {
-        const c = document.createElement('canvas');
-        c.width = 512;
-        c.height = 96;
-        const x = c.getContext('2d');
-        x.font = '700 44px "Atkinson Hyperlegible",system-ui,sans-serif';
-        x.fillStyle = color;
-        x.textBaseline = 'middle';
-        x.fillText(text, 8, 48, 496);
+        const map = textTexture(512, 112, (x, cw, ch) => {
+            x.font = `700 52px ${FONT}`;
+            const pw = Math.min(cw - 8, x.measureText(text).width + 56);
+            x.fillStyle = INK;
+            x.beginPath();
+            x.roundRect(4, 4, pw, ch - 8, 16);
+            x.fill();
+            x.fillStyle = color;
+            x.beginPath();
+            x.roundRect(12, 12, pw - 16, ch - 24, 10);
+            x.fill();
+            x.fillStyle = PAL.night;
+            x.beginPath();
+            x.roundRect(20, 20, pw - 32, ch - 40, 6);
+            x.fill();
+            x.textBaseline = 'middle';
+            x.fillStyle = PAL.white;
+            x.fillText(text, 32, ch / 2 + 2, pw - 56);
+        });
         const s = new THREE.Sprite(new THREE.SpriteMaterial({
-            map: new THREE.CanvasTexture(c), transparent: true, opacity: 0, depthWrite: false,
+            map, transparent: true, opacity: 0, depthWrite: false,
         }));
-        s.scale.set(w, (w * 96) / 512, 1);
+        s.scale.set(w, (w * 112) / 512, 1);
         s.center.set(0, 0.5);
         scene.add(s);
         return s;
@@ -729,13 +921,10 @@ export function playCaptureAnimation(container, {
     dotC.width = 32;
     dotC.height = 32;
     {
+        // square, hard-edged dots: each one is a pixel
         const x = dotC.getContext('2d');
-        const rg = x.createRadialGradient(16, 16, 0, 16, 16, 16);
-        rg.addColorStop(0, '#fff');
-        rg.addColorStop(0.6, 'rgba(255,255,255,.8)');
-        rg.addColorStop(1, 'rgba(255,255,255,0)');
-        x.fillStyle = rg;
-        x.fillRect(0, 0, 32, 32);
+        x.fillStyle = '#fff';
+        x.fillRect(5, 5, 22, 22);
     }
     const dotTex = new THREE.CanvasTexture(dotC);
 
@@ -814,8 +1003,8 @@ export function playCaptureAnimation(container, {
     scene.add(stage);
 
     const floorTex = canvasTexture(64, 64, (x) => {
-        x.strokeStyle = 'rgba(154,171,196,.09)';
-        x.lineWidth = 2;
+        x.strokeStyle = FLOOR_GRID;
+        x.lineWidth = 4;
         x.strokeRect(0, 0, 64, 64);
     });
     floorTex.wrapS = THREE.RepeatWrapping;
@@ -832,15 +1021,15 @@ export function playCaptureAnimation(container, {
     // flat colours per face fake the lighting, so the belt reads as raised without shading
     const beltLen = BELT_X1 - BELT_X0;
     const slatTex = canvasTexture(64, 16, (x) => {
-        x.fillStyle = '#3a4a63';
+        x.fillStyle = PAL.iron;
         x.fillRect(0, 0, 64, 16);
-        x.fillStyle = '#2f3d54';
-        x.fillRect(0, 0, 10, 16);
+        x.fillStyle = PAL.stone;
+        x.fillRect(0, 0, 12, 16);
     });
     slatTex.wrapS = THREE.RepeatWrapping;
     slatTex.repeat.set(beltLen / STRIPE, 1);
-    const endMat = new THREE.MeshBasicMaterial({color: 0x2a374d});
-    const frontMat = new THREE.MeshBasicMaterial({color: 0x1d2738});
+    const endMat = new THREE.MeshBasicMaterial({color: PAL.stone});
+    const frontMat = new THREE.MeshBasicMaterial({color: PAL.slate});
     const belt = new THREE.Mesh(new THREE.BoxGeometry(beltLen, BELT_H, BELT_W), [
         endMat, endMat, new THREE.MeshBasicMaterial({map: slatTex}), frontMat, frontMat, frontMat,
     ]);
@@ -895,7 +1084,7 @@ export function playCaptureAnimation(container, {
     ];
 
     // the rails along the belt's edges are split at each seam too, so the belt reads as separate sections
-    const railMat = new THREE.MeshBasicMaterial({color: 0x56688a});
+    const railMat = new THREE.MeshBasicMaterial({color: PAL.steel});
     const railBreaks = [BELT_X0, ...edges.slice(0, 5), BELT_X1];
     railBreaks.slice(1).forEach((x1, i) => {
         const x0 = railBreaks[i];
@@ -907,12 +1096,10 @@ export function playCaptureAnimation(container, {
             stage.add(rail);
         });
     });
-    const sectionCol = [...LCOL, '#e9eef7'];
-    const floorBase = new THREE.Color(0x0e1726);
     SECTION_NAMES.forEach((name, i) => {
         const [x0, x1] = [edges[i], edges[i + 1]];
         const patch = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, 100), oval(fade(new THREE.MeshBasicMaterial({
-            color: floorBase.clone().lerp(new THREE.Color(sectionCol[i]), 0.13), transparent: true, depthWrite: false,
+            color: SECTION_FLOOR[i], transparent: true, depthWrite: false,
         }))));
         patch.rotation.x = -Math.PI / 2;
         patch.position.set((x0 + x1) / 2, FLOOR - 0.002, 0);
@@ -920,17 +1107,32 @@ export function playCaptureAnimation(container, {
         stage.add(patch);
 
         // the name, painted on the floor just past the tape and right up against the front of the
-        // belt, where the workers don't stand on it; it reads along the tape like a road marking
-        const paint = canvasTexture(1024, 256, (x, w, h) => {
-            x.font = '900 190px Impact, "Arial Black", sans-serif';
+        // belt, where the workers don't stand on it; it reads along the tape like a road marking.
+        // Painted like a type badge: a pill in the section's colour, spaced-out letters with an outline
+        const paint = textTexture(1024, 256, (x, w, h) => {
+            const pill = (inset, color) => {
+                x.fillStyle = color;
+                x.beginPath();
+                x.roundRect(inset, 24 + inset, w - 2 * inset, h - 48 - 2 * inset, (h - 48) / 2 - inset);
+                x.fill();
+            };
+            pill(4, INK);
+            pill(16, ADJUSTED.mistDark);
+            pill(26, SECTION_BADGE[i]);
+            x.font = `700 120px ${FONT}`;
+            x.letterSpacing = '24px';
             x.textAlign = 'center';
             x.textBaseline = 'middle';
-            x.fillStyle = sectionCol[i];
-            x.fillText(name, w / 2, h / 2 + 8, w - 40);
+            x.lineJoin = 'round';
+            x.lineWidth = 22;
+            x.strokeStyle = INK;
+            x.strokeText(name, w / 2 + 12, h / 2 + 6, w - 160);
+            x.fillStyle = PAL.steel; // greyed so it doesn't compete with the workers
+            x.fillText(name, w / 2 + 12, h / 2 + 6, w - 160);
             // worn paint
             const rnd = makeRnd(31 + i);
             x.globalCompositeOperation = 'destination-out';
-            for (let k = 0; k < 260; k += 1) {
+            for (let k = 0; k < 160; k += 1) {
                 x.globalAlpha = 0.3 + rnd() * 0.7;
                 x.fillRect(rnd() * w, rnd() * h, 2 + rnd() * 7, 2 + rnd() * 5);
             }
@@ -953,11 +1155,11 @@ export function playCaptureAnimation(container, {
     const TAPE_PX = 32; // tape width in texture pixels
     const BAND = 24; // one band's length along the tape, in pixels
     const SLANT = 0.8; // how far a stripe moves along the tape per pixel across it
-    const tapeMat = (length) => {
+    const tapeMat = (length, color) => {
         const map = canvasTexture(TAPE_PX * 2, BAND * 2, (x, w, h) => {
-            x.fillStyle = '#ffc900';
+            x.fillStyle = color;
             x.fillRect(0, 0, w, h);
-            x.fillStyle = '#151515';
+            x.fillStyle = INK;
             for (let k = -1; k <= 3; k += 1) {
                 x.beginPath();
                 x.moveTo(0, k * h);
@@ -976,9 +1178,9 @@ export function playCaptureAnimation(container, {
         map.repeat.set(0.5, length / (TAPE * (BAND * 2) / TAPE_PX));
         return fade(new THREE.MeshBasicMaterial({map, transparent: true, depthWrite: false}));
     };
-    const floorTape = oval(tapeMat(100));
-    const sideTape = tapeMat(BELT_H);
-    const seamMat = fade(new THREE.MeshBasicMaterial({color: 0x121a28, transparent: true}));
+    const floorTape = oval(tapeMat(100, TAPE_COL)); // dimmed with the rest of the floor
+    const sideTape = tapeMat(BELT_H, PAL.yellow); // full yellow on the belt, which stays bright
+    const seamMat = fade(new THREE.MeshBasicMaterial({color: INK, transparent: true}));
     edges.slice(0, 5).forEach((x) => {
         const strip = new THREE.Mesh(new THREE.PlaneGeometry(TAPE, 100), floorTape);
         strip.rotation.x = -Math.PI / 2;
@@ -1000,16 +1202,16 @@ export function playCaptureAnimation(container, {
     // Additive and drawn late, so the light spills over the workers and the belt beneath.
     const beamTex = canvasTexture(8, 128, (x, w, h) => {
         const g = x.createLinearGradient(0, 0, 0, h);
-        g.addColorStop(0, 'rgba(255,236,190,.9)');
-        g.addColorStop(0.6, 'rgba(255,236,190,.25)');
-        g.addColorStop(1, 'rgba(255,236,190,0)');
+        g.addColorStop(0, 'rgba(238,195,154,.9)'); // PAL.peach
+        g.addColorStop(0.6, 'rgba(238,195,154,.25)');
+        g.addColorStop(1, 'rgba(238,195,154,0)');
         x.fillStyle = g;
         x.fillRect(0, 0, w, h);
     });
     const poolTex = canvasTexture(128, 128, (x, w) => {
         const g = x.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
-        g.addColorStop(0, 'rgba(255,236,190,.8)');
-        g.addColorStop(1, 'rgba(255,236,190,0)');
+        g.addColorStop(0, 'rgba(238,195,154,.8)');
+        g.addColorStop(1, 'rgba(238,195,154,0)');
         x.fillStyle = g;
         x.fillRect(0, 0, w, w);
     });
@@ -1018,11 +1220,14 @@ export function playCaptureAnimation(container, {
     }), full);
     const beamMat = lit(beamTex, 0.22);
     const poolMat = lit(poolTex, 0.3);
-    const shadeMat = fade(new THREE.MeshBasicMaterial({color: 0x2a3140, transparent: true, side: THREE.DoubleSide}));
-    const bulbMat = fade(new THREE.MeshBasicMaterial({color: 0xfff1c4, transparent: true}));
+    const floorPoolMat = lit(poolTex, 0.14); // dimmer on the floor, so the light lands on the belt
+    const shadeMat = fade(new THREE.MeshBasicMaterial({color: PAL.slate, transparent: true, side: THREE.DoubleSide}));
+    const bulbMat = fade(new THREE.MeshBasicMaterial({color: PAL.yellow, transparent: true}));
     const lampY = BELT_TOP + LAMP_H;
+    const lampXZ = []; // where each lamp hangs, for lighting the workers
     [...STATION_X, DESK_X].forEach((x, i) => {
         const z = i < STATION_X.length ? 0 : -(BELT_W / 2 + 0.35); // the desk lamp hangs over the foreman
+        lampXZ.push(new THREE.Vector2(x, z));
         // long enough to run off the top of the screen from every belt-view angle
         const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 30), shadeMat);
         cable.position.set(x, lampY + 15, z);
@@ -1033,7 +1238,7 @@ export function playCaptureAnimation(container, {
         const drop = lampY - FLOOR;
         const beam = new THREE.Mesh(new THREE.ConeGeometry(2.3, drop, 32, 1, true), beamMat);
         beam.position.set(x, lampY - drop / 2, z);
-        const floorPool = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), poolMat);
+        const floorPool = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), floorPoolMat);
         floorPool.rotation.x = -Math.PI / 2;
         floorPool.position.set(x, FLOOR + 0.004, z);
         const beltPool = new THREE.Mesh(new THREE.PlaneGeometry(4, BELT_W), poolMat);
@@ -1080,10 +1285,49 @@ export function playCaptureAnimation(container, {
         3: [[-1, -0.6], [-1, 0.6], [1, 0]],
         4: [[-1, -0.6], [-1, 0.6], [1, -0.6], [1, 0.6]],
     };
+    // The workers are lit by the lamps above them, worked out per pixel from where it is in the
+    // world: brightest near a lamp and towards the top (hats and heads), darker towards the feet
+    // and away from the lamps. The palette lock turns the gradient into dithered shading.
+    const lampLight = {
+        uLamps: {value: lampXZ},
+        uFloorY: {value: FLOOR},
+        uLight: {value: new THREE.Vector4(WORKER_LIGHT.top, WORKER_LIGHT.feet, WORKER_LIGHT.away, WORKER_LIGHT.reach)},
+    };
+    const lampLit = (mat) => {
+        Object.assign(mat, {
+            onBeforeCompile: (shader) => {
+                Object.assign(shader.uniforms, lampLight);
+                Object.assign(shader, {
+                    vertexShader: shader.vertexShader
+                        .replace('#include <common>', '#include <common>\nvarying vec3 vLampWorld;')
+                        .replace('#include <project_vertex>',
+                            '#include <project_vertex>\nvLampWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;'),
+                    fragmentShader: shader.fragmentShader
+                        .replace('#include <common>', `#include <common>
+                            varying vec3 vLampWorld;
+                            uniform vec2 uLamps[${lampXZ.length}];
+                            uniform float uFloorY;
+                            uniform vec4 uLight; // top, feet, away, reach`)
+                        .replace('#include <opaque_fragment>', `
+                            float under = 0.0; // 1 right under a lamp, 0 out of its reach
+                            for (int i = 0; i < ${lampXZ.length}; i++) {
+                                under = max(under, 1.0 - smoothstep(uLight.w, uLight.w + 1.0, length(vLampWorld.xz - uLamps[i])));
+                            }
+                            float up = clamp((vLampWorld.y - uFloorY) / 1.5, 0.0, 1.0); // 0 at the feet, 1 at the hat
+                            outgoingLight *= mix(uLight.z, mix(uLight.y, uLight.x, up), under);
+                            #include <opaque_fragment>`),
+                });
+            },
+        });
+        return mat;
+    };
+
     let wn = 0;
     const workers = [];
     function addWorker(opts, place) {
         const wk = makeWorker(wn, opts);
+        wk.group.children.forEach((m) => lampLit(m.material));
+        if (wk.drawHand) lampLit(wk.drawHand.material);
         // all roughly the same height, but not identical
         const scale = WORKER_SCALE * (0.92 + 0.16 * ((wn * 0.618) % 1));
         wn += 1;
@@ -1122,7 +1366,7 @@ export function playCaptureAnimation(container, {
             addWorker({pencil: LCOL[L]}, {x: st.x + dx, side: s, arrive: st.arrive, leave: st.leave, list});
         });
     });
-    const foreman = addWorker({clipboard: true, hat: '#f4f1e8'}, {
+    const foreman = addWorker({clipboard: true, hat: FOREMAN_HAT}, {
         x: DESK_X, side: -1, arrive: DESK_T, leave: VOTE_END, list: [],
     });
 
@@ -1132,8 +1376,11 @@ export function playCaptureAnimation(container, {
         x.fillStyle = col;
         x.fillRect(6, 6, 52, 52);
         x.globalAlpha = 1;
+        x.strokeStyle = INK;
+        x.lineWidth = 10;
+        x.strokeRect(6, 6, 52, 52);
         x.strokeStyle = col;
-        x.lineWidth = 6;
+        x.lineWidth = 5;
         x.strokeRect(6, 6, 52, 52);
     }));
     const voteGap = (COUNT[1] - COUNT[0] - FLY) / Math.max(1, strokes[3].length - 1);
@@ -1170,30 +1417,41 @@ export function playCaptureAnimation(container, {
     function drawBubble(text) {
         const x = bubbleC.getContext('2d');
         x.clearRect(0, 0, 512, 220);
-        x.fillStyle = '#fff';
-        x.strokeStyle = '#2b2b2b';
-        x.lineWidth = 6;
         // one outline around the box and tail together, so there's no seam where they meet
-        const [l, tp, r, b, rad] = [8, 8, 504, 168, 40];
+        const [l, tp, r, b, rad] = [12, 12, 500, 164, 28];
         x.beginPath();
         x.moveTo(l + rad, tp);
         x.arcTo(r, tp, r, b, rad);
         x.arcTo(r, b, l, b, rad);
         x.lineTo(104, b);
-        x.lineTo(51, 214); // the tail's tip
+        x.lineTo(51, 208); // the tail's tip
         x.lineTo(66, b);
         x.arcTo(l, b, l, tp, rad);
         x.arcTo(l, tp, r, tp, rad);
         x.closePath();
+        // a game dialog box: white, with a black, blue, black border
+        x.lineJoin = 'round';
+        x.fillStyle = PAL.white;
         x.fill();
+        x.strokeStyle = INK;
+        x.lineWidth = 18;
         x.stroke();
-        x.fillStyle = '#2b2b2b';
-        x.font = '700 44px "Atkinson Hyperlegible",system-ui,sans-serif';
+        x.strokeStyle = PAL.sky;
+        x.lineWidth = 8;
+        x.stroke();
+        x.font = `700 46px ${FONT}`;
         x.textAlign = 'center';
         x.textBaseline = 'middle';
-        x.fillText(text, 256, 88, 460);
+        x.fillStyle = PAL.steel; // the drop shadow game text has
+        x.fillText(text, 260, 92, 440);
+        x.fillStyle = PAL.stone;
+        x.fillText(text, 256, 88, 440);
         bubbleTex.needsUpdate = true;
     }
+    // redraw once the pixel font has loaded, in case the first line went out before it
+    document.fonts?.load(`700 46px ${FONT}`).then(() => {
+        if (bubbleText) drawBubble(bubbleText);
+    }, () => {});
 
     // ---------- the normalised image that comes out of the model ----------
     const {w: nw, h: nh} = sourceSize(normalised);
@@ -1205,10 +1463,10 @@ export function playCaptureAnimation(container, {
     });
     const card = new THREE.Mesh(new THREE.PlaneGeometry(cardW, cardH), cardMat);
     scene.add(card);
-    const cardBoxMat = new THREE.MeshBasicMaterial({color: 0xff4d4d, transparent: true, opacity: 0});
+    const cardBoxMat = new THREE.MeshBasicMaterial({color: PAL.rose, transparent: true, opacity: 0});
     const cardBox = new THREE.Mesh(new THREE.ShapeGeometry(frameShape(cardW, cardH, 0.05)), cardBoxMat);
     scene.add(cardBox);
-    const resultLabel = textSprite(label, '#ff4d4d', 2.6);
+    const resultLabel = textSprite(label, PAL.rose, 3.4);
 
     // ---------- layout ----------
     let aspect = 1;
@@ -1219,7 +1477,10 @@ export function playCaptureAnimation(container, {
         const w = canvas.clientWidth;
         const h = canvas.clientHeight;
         if (!w || !h) return;
-        renderer.setSize(w, h, false);
+        const [rw, rh] = [Math.ceil(w / PIXEL), Math.ceil(h / PIXEL)];
+        renderer.setSize(rw, rh, false);
+        const pr = renderer.getPixelRatio();
+        sceneTarget?.setSize(Math.round(rw * pr), Math.round(rh * pr));
         aspect = w / h;
         camera.aspect = aspect;
         frontDist = Math.max(10, 3.6 / (0.4142 * aspect)); // keeps the bigger photo on narrow screens
@@ -1276,9 +1537,9 @@ export function playCaptureAnimation(container, {
         const x = shx;
         x.globalAlpha = 1;
         x.shadowBlur = 0;
-        x.fillStyle = '#0a1220';
+        x.fillStyle = INK;
         x.fillRect(0, 0, SHW, SHH);
-        x.strokeStyle = '#2a3b58';
+        x.strokeStyle = PAL.indigo;
         x.lineWidth = 8;
         x.strokeRect(4, 4, SHW - 8, SHH - 8);
 
@@ -1287,14 +1548,13 @@ export function playCaptureAnimation(container, {
             - 0.1 * seg(t, STOPS[2].leave, STOPS[2].leave + 0.6);
         if (da > 0.01) {
             // only the cells the resize step kept
-            const r = (SHW / NX) * 0.85;
+            // square, like the dots on the planes
+            const r = (SHW / NX) * 0.8;
             for (let j = 0; j < NY; j += 2) {
                 for (let i = 0; i < NX; i += 2) {
                     const p = (j * NX + i) * 4;
                     x.fillStyle = `rgba(${pixels[p]},${pixels[p + 1]},${pixels[p + 2]},${da})`;
-                    x.beginPath();
-                    x.arc(((i + 0.5) / NX) * SHW, ((j + 0.5) / NY) * SHH, r, 0, Math.PI * 2);
-                    x.fill();
+                    x.fillRect(((i + 0.5) / NX) * SHW - r, ((j + 0.5) / NY) * SHH - r, 2 * r, 2 * r);
                 }
             }
         }
@@ -1304,13 +1564,10 @@ export function playCaptureAnimation(container, {
         strokes.forEach((list, L) => {
             const fade = L === 3 ? 0.75 * seg(t, COUNT[0], COUNT[1]) : 0.6 * faded(L, t);
             x.globalAlpha = 1 - fade;
-            x.shadowBlur = 10;
-            x.lineWidth = STROKE_W[L] * (SHW / 512);
+            const lw = STROKE_W[L] * (SHW / 512);
             list.forEach((line) => {
                 const p = clamp((t - line.t0) / (line.t1 - line.t0));
                 if (!(p > 0)) return;
-                x.strokeStyle = strokeCol(L, line);
-                x.shadowColor = x.strokeStyle;
                 const d = p * line.len;
                 x.beginPath();
                 x.moveTo(...line.pts[0]);
@@ -1322,6 +1579,12 @@ export function playCaptureAnimation(container, {
                         break;
                     }
                 }
+                // a black outline under each mark, the way sprites are drawn
+                x.strokeStyle = INK;
+                x.lineWidth = lw + 6 * (SHW / 512);
+                x.stroke();
+                x.strokeStyle = strokeCol(L, line);
+                x.lineWidth = lw;
                 x.stroke();
             });
         });
@@ -1530,7 +1793,7 @@ export function playCaptureAnimation(container, {
         cardBox.position.set(cardEnd.x, cardEnd.y, cardEnd.z + 0.02);
         resultLabel.material.opacity = seg(t, RESULT[1] + 0.33 * T.resultLabels, RESULT[1] + T.resultLabels);
         resultLabel.visible = resultLabel.material.opacity > 0.001;
-        resultLabel.position.set(cardEnd.x - cardW / 2, cardEnd.y + cardH / 2 + 0.3, cardEnd.z + 0.05);
+        resultLabel.position.set(cardEnd.x - cardW / 2 - 0.05, cardEnd.y + cardH / 2 + 0.48, cardEnd.z + 0.05);
 
         // bars
         barsEl.style.opacity = seg(t, SCORES_T, BARS[0]);
@@ -1552,7 +1815,14 @@ export function playCaptureAnimation(container, {
             textEl.textContent = STEPS[s][2];
             [...stepsEl.children].forEach((e, i) => e.classList.toggle('on', i <= s));
         }
-        renderer.render(scene, camera);
+        if (sceneTarget) {
+            renderer.setRenderTarget(sceneTarget);
+            renderer.render(scene, camera);
+            renderer.setRenderTarget(null);
+            renderer.render(palScene, palCamera);
+        } else {
+            renderer.render(scene, camera);
+        }
     }
 
     // ---------- playback ----------
@@ -1586,6 +1856,7 @@ export function playCaptureAnimation(container, {
     const onKey = (e) => {
         if (e.key === 'Escape') onClose?.();
         if (!DEBUG) return;
+        if (e.target instanceof HTMLInputElement) return; // arrows move the slider, not the frame
         if (e.key === ' ') {
             e.preventDefault();
             if (t >= END) t = 0;
@@ -1635,6 +1906,9 @@ export function playCaptureAnimation(container, {
             });
         });
         dotTex.dispose();
+        sceneTarget?.dispose();
+        palPass.geometry.dispose();
+        palPass.material.dispose();
         renderer.dispose();
         renderer.forceContextLoss();
         root.remove();
