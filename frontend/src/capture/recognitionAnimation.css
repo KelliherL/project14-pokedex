@@ -4,7 +4,7 @@
    Everything is scoped under .cap-stage so it can't leak into the rest of the app. */
 .cap-stage {
     --stage: #0e1726;
-    --panel: rgba(20, 32, 52, .82);
+    --panel: rgba(20, 32, 52, .94); /* the bigger planes pass behind the caption; keep it readable */
     --line: #2a3b58;
     --text: #e9eef7;
     --muted: #9aabc4;

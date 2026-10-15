@@ -29,42 +29,71 @@ const DEBUG = true;
 const DEBUG_FPS = 60; // playback is time-based; the frame number is just t at this nominal rate
 
 // ---------- timeline ----------
-// Every phase is either a transformation (the data visibly changes) or a gap (waiting, or the
-// camera moving). The base durations below are scaled by these two, so pacing is tuned here.
+// One speed per section: 1 = as it is now, 2 = twice as fast, 0.5 = half speed. Everything in the
+// section scales with it, including the pause leading into it.
+const SPEED = {
+    capture: 2, // camera pops in, spits out the photo, photo flips into place
+    crop: 1.5, // detection box appears
+    channels: 1, // photo splits into blue, green and red
+    normalise: 1, // resize and normalize
+    merge: 1.25, // the channels slide back into one picture
+    drop:0.8, // camera and picture drop down to the belt
+    stations: 0.6, // workers drawing at each station
+    travel: 0.75, // the belt rushing between stations
+    vote: 0.75, // votes flying to the foreman, and his last line
+    scores: 1, // camera back to the front view, score bars filling
+    result: 1, // normalised image rising up, name appearing
+};
+
+// Within a section, each phase is either a transformation (the data visibly changes) or a gap
+// (waiting, or the camera moving), weighted differently. SPEED is usually all that needs touching.
 const XF_SCALE = 1.4;
 const GAP_SCALE = 0.75;
-const xf = (s) => s * XF_SCALE;
-const gap = (s) => s * GAP_SCALE;
+const LATE_SCALE = 1.5; // transformations after the resize step run longer still
+const xf = (sec, s) => (s * XF_SCALE) / SPEED[sec];
+const gap = (sec, s) => (s * GAP_SCALE) / SPEED[sec];
+const lateXf = (sec, s) => (s * XF_SCALE * LATE_SCALE) / SPEED[sec];
 
-const CAM_IN = [0, xf(0.4)]; // the instant camera pops in
-const SHUTTER = CAM_IN[1] + xf(0.15);
-const EJECT = [SHUTTER + xf(0.3), SHUTTER + xf(1.3)]; // the photo slides out of the slot, face down
-const FLIP = [EJECT[1], EJECT[1] + xf(1.2)]; // camera fades, photo flips over into place
-const CROP = [FLIP[1] + gap(1.9), FLIP[1] + gap(1.9) + xf(0.9)];
-const CHAN_T = CROP[1] + gap(1.6); // photo hands over to the channel planes
-const SPLIT = [CHAN_T + xf(0.8), CHAN_T + xf(2.6)];
-const NORM = [SPLIT[1] + gap(1.4), SPLIT[1] + gap(1.4) + xf(2.5)];
-const MERGE = [NORM[1], NORM[1] + xf(1.4)]; // the three planes slide back into one picture
-const DROP = [MERGE[1], MERGE[1] + gap(2)]; // camera and picture drop down to the belt
+const CAM_IN = [0, xf('capture', 0.4)]; // the instant camera pops in
+const SHUTTER = CAM_IN[1] + xf('capture', 0.15);
+const FLASH = xf('capture', 0.3);
+const EJECT = [SHUTTER + FLASH, SHUTTER + xf('capture', 1.3)]; // the photo slides out of the slot, face down
+const CAM_FADE = [EJECT[1], EJECT[1] + xf('capture', 0.5)]; // camera fades away before the flip so they never cross
+const FLIP = [CAM_FADE[1], CAM_FADE[1] + xf('capture', 1.2)]; // photo flips over into place
+const CROP = [FLIP[1] + gap('crop', 1.9), FLIP[1] + gap('crop', 1.9) + xf('crop', 0.9)];
+const BOX_IN = xf('crop', 0.7);
+const CHAN_T = CROP[1] + gap('channels', 1.6); // photo hands over to the channel planes
+const CHAN_IN = xf('channels', 0.8);
+const SPLIT = [CHAN_T + CHAN_IN, CHAN_T + xf('channels', 2.6)];
+const NORM = [SPLIT[1] + gap('normalise', 1.4), SPLIT[1] + gap('normalise', 1.4) + xf('normalise', 2.5)];
+const MERGE = [NORM[1], NORM[1] + lateXf('merge', 1.4)]; // the three planes slide back into one picture
+// camera and picture drop down to the belt, the dots turning into the sheet on the way; slow enough
+// to follow, so it's paced as a transformation rather than a camera move
+const DROP = [MERGE[1], MERGE[1] + lateXf('drop', 2.2)];
 const LAND = DROP[1];
 
 // The belt never stops: it crawls past each station while the workers mark the sheet, and
 // rushes between stations.
-const TRAVEL = gap(2); // raising this slows down the jump between steps
-const WORK = xf(1.4);
+const TRAVEL = gap('travel', 2);
+const WORK = lateXf('stations', 1.4);
 const CRAWL = 0.35; // how far the sheet creeps while a station works on it
-const STATION_X = [-4.8, -1.6, 1.6, 4.8];
+// about five floor squares of empty belt between one station's workers and the next
+const STATION_X = [-9.15, -3.05, 3.05, 9.15];
 const STOPS = STATION_X.map((x, i) => {
     const arrive = LAND + TRAVEL + i * (TRAVEL + WORK);
     return {x, arrive, leave: arrive + WORK};
 });
 const DESK_T = STOPS[3].leave + TRAVEL; // sheet reaches the foreman
-const COUNT = [DESK_T + 0.3, DESK_T + 0.3 + xf(1.8)]; // votes fly into the clipboard
-const VOTE_END = COUNT[1] + 2; // time to read the foreman's last line
-const RETURN = [VOTE_END, VOTE_END + gap(1.4)]; // camera rises back to the front view
-const SCORES_T = RETURN[1] - gap(0.3);
-const RESULT_T = SCORES_T + xf(0.6) + xf(2) + gap(1.4);
-const END = RESULT_T + xf(1.6) + 1.5;
+const COUNT = [DESK_T + 0.3 / SPEED.vote, DESK_T + 0.3 / SPEED.vote + lateXf('vote', 1.8)]; // votes fly into the clipboard
+const FLY = lateXf('vote', 0.55); // one vote's flight
+const VOTE_END = COUNT[1] + 2 / SPEED.vote; // time to read the foreman's last line
+const RETURN = [VOTE_END, VOTE_END + gap('scores', 1.4)]; // camera rises back to the front view
+const SCORES_T = RETURN[1] - gap('scores', 0.3);
+const BARS_IN = lateXf('scores', 0.6);
+const BARS_FILL = lateXf('scores', 2);
+const RESULT_T = SCORES_T + BARS_IN + BARS_FILL + gap('result', 1.4);
+const res = (s) => lateXf('result', s); // result timings, as offsets from RESULT_T
+const END = RESULT_T + res(1.6) + 1.5 / SPEED.result;
 
 const STEPS = [
     [0, 'Capture', 'The camera grabs a single frame.'],
@@ -76,14 +105,15 @@ const STEPS = [
     [STOPS[3].arrive, 'Parts point to answers', 'At the last station each worker stands for one possible answer and marks the parts that point to it. The more they find, the higher that answer scores.'],
     [DESK_T, 'The vote', 'The marks are counted up as votes for each Pokémon.'],
     [SCORES_T, 'Scores', 'The last layer gives one score per Pokémon. The highest wins.'],
-    [RESULT_T - xf(0.4), 'Result', 'Out comes the normalised image the classifier worked on, with the name it gave.'],
+    [RESULT_T - res(0.4), 'Result', 'Out comes the normalised image the classifier worked on, with the name it gave.'],
 ];
 const MAX_SCORE_ROWS = 4;
 
 // ---------- scene constants ----------
-const PHOTO = 4.4; // longest side of the photo plane, world units
+const PHOTO = 6.6; // longest side of the photo plane, world units
 const PY = 0.3;
-const PLANE = 2.25; // longest side of the channel planes once lifted off the photo
+const PLANE = 3.6; // longest side of the channel planes once lifted off the photo
+const GROW = PLANE / 2.25; // how much bigger the planes are than the original explainer's
 const GRID = 40; // channel grid resolution along a square crop
 const CHAN = [[0, 0, 1], [0, 1, 0], [1, 0, 0]]; // B, G, R (OpenCV order)
 const LCOL = ['#5ad1ff', '#7dff9b', '#ffd45a', '#ff7ad9'];
@@ -104,12 +134,14 @@ const FLOOR = -9;
 const BELT_H = 0.7;
 const BELT_TOP = FLOOR + BELT_H;
 const BELT_W = 1.7;
-const BELT_X0 = -9;
-const BELT_X1 = 9.2;
-const START_X = -7.6;
-const DESK_X = 7.6;
+const BELT_X0 = -14;
+const BELT_X1 = 16;
+const START_X = -12.8;
+const DESK_X = 14.4;
 const STRIPE = 0.35; // spacing of the belt's slats
-const SHEET_SCALES = [0.62, 0.56, 0.5, 0.44]; // the sheet shrinks at each station, like a network's maps
+// the sheet shrinks at each station, like a network's maps (divided by GROW so the sheet on the
+// belt stays the same size however big the front-view planes are)
+const SHEET_SCALES = [0.62, 0.56, 0.5, 0.44].map((s) => s / GROW);
 const STROKE_W = [5, 6, 8, 10]; // marks get bolder as they get fewer
 // belt camera: looking down ~35 degrees, turned so the belt comes towards us from the top left,
 // through a narrow lens so it reads as near-orthographic
@@ -170,6 +202,17 @@ function sourceSize(source) {
     return {
         w: source.naturalWidth || source.videoWidth || source.width,
         h: source.naturalHeight || source.videoHeight || source.height,
+    };
+}
+
+// seeded random numbers, so every replay of the same capture looks the same
+function makeRnd(start) {
+    let seed = start;
+    return () => {
+        seed = (seed + 0x6D2B79F5) | 0;
+        let r = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
     };
 }
 
@@ -330,7 +373,8 @@ function makeWorker(n, {pencil = null, clipboard = false, hat = HAT} = {}) {
             x.fillStyle = '#c9ced6';
             x.fillRect(w * 0.35, 0, w * 0.3, h * 0.12);
         });
-        board.userData.base = [-0.3, 0.36, 0.005];
+        // in the hand on the side away from the belt, so it can't poke into it
+        board.userData.base = [0.3, 0.36, 0.005];
         parts.push(board);
         group.userData.board = board;
     }
@@ -446,14 +490,25 @@ function makeStrokes(pixels, NX, NY, SHW, SHH, partCounts) {
         const ty = gx / (m || 1);
         return [[cx - tx * half, cy - ty * half], [cx + tx * half, cy + ty * half]];
     });
-    const curves = spread(grads, 9, 6).map(({i, j, gx, gy, m}) => {
+    // The very strongest gradients are usually the object's outline, so curves taken from them
+    // all hug the border. Draw from a shuffled pool of the busier 60% instead, and vary each
+    // curve's size, turn and length. Seeded, so a replay draws the same curves.
+    const rnd = makeRnd(7);
+    const pool = grads.slice(0, Math.max(20, Math.floor(grads.length * 0.6)));
+    for (let k = pool.length - 1; k > 0; k -= 1) {
+        const r = Math.floor(rnd() * (k + 1));
+        [pool[k], pool[r]] = [pool[r], pool[k]];
+    }
+    const curves = spread(pool, 9, 6).map(({i, j, gx, gy}) => {
         const [cx, cy] = px(i, j);
-        const r = cell * 2.6;
-        const ox = cx + (gx / (m || 1)) * r;
-        const oy = cy + (gy / (m || 1)) * r;
-        const base = Math.atan2(cy - oy, cx - ox);
+        const r = cell * lerp(1.8, 3.2, rnd());
+        const toCentre = Math.atan2(gy, gx) + (rnd() - 0.5) * 1.6;
+        const ox = cx + Math.cos(toCentre) * r;
+        const oy = cy + Math.sin(toCentre) * r;
+        const base = toCentre + Math.PI;
+        const span = lerp(0.6, 1.2, rnd());
         return Array.from({length: 13}, (_, k) => {
-            const a = base + lerp(-0.95, 0.95, k / 12);
+            const a = base + lerp(-span, span, k / 12);
             return [ox + r * Math.cos(a), oy + r * Math.sin(a)];
         });
     });
@@ -569,6 +624,7 @@ export function playCaptureAnimation(container, {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     renderer.setClearColor(0x0e1726);
+    renderer.localClippingEnabled = true; // lets the photo come out of the camera's slot
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
 
@@ -584,10 +640,13 @@ export function playCaptureAnimation(container, {
     const fa = fw / fh;
     const PW = fa >= 1 ? PHOTO : PHOTO * fa;
     const PH = PW / fa;
-    // the photo has a back, so it can come out face down and flip over
+    // the photo has a back, so it can come out face down and flip over. While it's coming out it
+    // sits in front of the camera and everything above the slot is clipped off, so it appears
+    // to slide out of the slot itself
+    const slotClip = new THREE.Plane(new THREE.Vector3(0, -1, 0), 1000);
     const photoRig = new THREE.Group();
     scene.add(photoRig);
-    const photoMat = new THREE.MeshBasicMaterial({map: textureFrom(frame), transparent: true});
+    const photoMat = new THREE.MeshBasicMaterial({map: textureFrom(frame), transparent: true, clippingPlanes: [slotClip]});
     const photo = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), photoMat);
     photoRig.add(photo);
     const backMat = new THREE.MeshBasicMaterial({
@@ -599,14 +658,16 @@ export function playCaptureAnimation(container, {
             x.strokeRect(10, 10, w - 20, h - 20);
         }),
         transparent: true,
+        clippingPlanes: [slotClip],
     });
     const back = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), backMat);
     back.rotation.y = Math.PI;
     photoRig.add(back);
     const ejectScale = EJECT_W / PW;
-    const camBottom = CAM_Y - CAMH * (0.958 - 0.5); // bottom edge of the camera body
-    const ejectFrom = new THREE.Vector3(0, camBottom + (PH * ejectScale) / 2, 0);
-    const ejectTo = new THREE.Vector3(0, camBottom - (PH * ejectScale) / 2 + 0.06, 0);
+    const SLOT = 0.401; // slot line, as a fraction of the camera's height below its centre
+    const slotY = CAM_Y - CAMH * SLOT;
+    const ejectFrom = new THREE.Vector3(0, slotY + (PH * ejectScale) / 2, 0.15);
+    const ejectTo = new THREE.Vector3(0, slotY - (PH * ejectScale) / 2, 0.15);
     const photoHome = new THREE.Vector3(0, PY, 0);
 
     // crop region (pixels) -> world
@@ -701,8 +762,9 @@ export function playCaptureAnimation(container, {
         planes.push({grp, geo, mat});
     }
 
-    function updatePlanes(hk, desat, drop, op) {
+    function updatePlanes(hk, desat, drop, op, size) {
         planes.forEach(({geo, mat}, k) => {
+            mat.size = size; // dots keep their size relative to the grid as the planes scale
             const pos = geo.attributes.position.array;
             const col = geo.attributes.color.array;
             const c = CHAN[k];
@@ -735,8 +797,9 @@ export function playCaptureAnimation(container, {
     });
     floorTex.wrapS = THREE.RepeatWrapping;
     floorTex.wrapT = THREE.RepeatWrapping;
-    floorTex.repeat.set(50 / 0.8, 24 / 0.8);
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(50, 24), new THREE.MeshBasicMaterial({
+    // big enough to fill the view for most of the drop, as a reference for the camera move
+    floorTex.repeat.set(160 / 0.8, 100 / 0.8);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(160, 100), new THREE.MeshBasicMaterial({
         map: floorTex, transparent: true, depthWrite: false,
     }));
     floor.rotation.x = -Math.PI / 2;
@@ -837,10 +900,10 @@ export function playCaptureAnimation(container, {
             });
             return;
         }
-        SPOTS[3].forEach(([s, dx]) => {
-            // far-side workers split the sheet into left and right halves; the near one takes its whole half
+        SPOTS[4].forEach(([s, dx]) => {
+            // each worker takes the quarter of the sheet nearest them: their side, their end
             const list = schedule(strokes[L].filter((line) => line.side === s
-                && (s === 1 || (line.centre[0] < SHW / 2) === (dx < 0))), st);
+                && (line.centre[0] < SHW / 2) === (dx < 0)), st);
             addWorker({pencil: LCOL[L]}, {x: st.x + dx, side: s, arrive: st.arrive, leave: st.leave, list});
         });
     });
@@ -866,7 +929,6 @@ export function playCaptureAnimation(container, {
         x.lineWidth = 6;
         x.strokeRect(6, 6, 52, 52);
     }));
-    const FLY = xf(0.55);
     const voteGap = (COUNT[1] - COUNT[0] - FLY) / Math.max(1, strokes[3].length - 1);
     const votes = strokes[3].map((line, i) => {
         const v = new THREE.Sprite(new THREE.SpriteMaterial({map: voteTex[line.guess], transparent: true, depthWrite: false}));
@@ -877,10 +939,10 @@ export function playCaptureAnimation(container, {
 
     // the foreman counts out loud; a little something for the Pokémon fans
     const lines = [
-        [DESK_T - 0.2, 'Right, from number one…'],
+        [DESK_T - 0.2 / SPEED.vote, 'Right, from number one…'],
         ...votes.map((v, i) => [v.userData.t0 + FLY, `${i + 1}…`]),
-        [COUNT[1] + 0.2, '…149, 150, 151!'],
-        [COUNT[1] + 1.1, "Gotta count 'em all!"],
+        [COUNT[1] + 0.2 / SPEED.vote, '…149, 150, 151!'],
+        [COUNT[1] + 1.1 / SPEED.vote, "Gotta count 'em all!"],
     ];
     const bubbleC = document.createElement('canvas');
     bubbleC.width = 512;
@@ -900,14 +962,20 @@ export function playCaptureAnimation(container, {
         x.fillStyle = '#fff';
         x.strokeStyle = '#2b2b2b';
         x.lineWidth = 6;
+        // one outline around the box and tail together, so there's no seam where they meet
+        const [l, tp, r, b, rad] = [8, 8, 504, 168, 40];
         x.beginPath();
-        x.roundRect(8, 8, 496, 160, 40);
-        x.moveTo(40, 160);
-        x.lineTo(51, 214);
-        x.lineTo(100, 160);
+        x.moveTo(l + rad, tp);
+        x.arcTo(r, tp, r, b, rad);
+        x.arcTo(r, b, l, b, rad);
+        x.lineTo(104, b);
+        x.lineTo(51, 214); // the tail's tip
+        x.lineTo(66, b);
+        x.arcTo(l, b, l, tp, rad);
+        x.arcTo(l, tp, r, tp, rad);
+        x.closePath();
         x.fill();
         x.stroke();
-        x.fillRect(44, 150, 52, 14); // hide the outline where the tail joins
         x.fillStyle = '#2b2b2b';
         x.font = '700 44px "Atkinson Hyperlegible",system-ui,sans-serif';
         x.textAlign = 'center';
@@ -943,7 +1011,7 @@ export function playCaptureAnimation(container, {
         renderer.setSize(w, h, false);
         aspect = w / h;
         camera.aspect = aspect;
-        frontDist = Math.max(10, 2.7 / (0.4142 * aspect));
+        frontDist = Math.max(10, 3.6 / (0.4142 * aspect)); // keeps the bigger photo on narrow screens
         // eslint-disable-next-line no-nested-ternary
         stageX = aspect > 1.3 ? -2.2 : aspect > 0.9 ? -1.3 : 0;
     }
@@ -1116,58 +1184,77 @@ export function playCaptureAnimation(container, {
         const sh = sheetAt(t);
         const view = placeCamera(t, sh.x);
 
-        // the instant camera pops in, flashes, spits the photo out face down, then fades as the
-        // photo flips over into place
-        const kick = 1 + 0.06 * bump(t, SHUTTER, xf(0.3));
+        // the instant camera pops in, flashes and spits the photo out of its slot face down, then
+        // fades away completely before the photo flips over into place
+        const kick = 1 + 0.06 * bump(t, SHUTTER, FLASH);
         const camIn = seg(t, CAM_IN[0], CAM_IN[1]);
-        instantMat.opacity = camIn * (1 - seg(t, FLIP[0], FLIP[0] + xf(0.6)));
+        const camOut = seg(t, CAM_FADE[0], CAM_FADE[1]);
+        instantMat.opacity = camIn * (1 - camOut);
         instant.visible = instantMat.opacity > 0.001;
         instant.scale.setScalar(lerp(0.7, 1, camIn) * kick);
-        instant.position.y = CAM_Y + 0.4 * seg(t, FLIP[0], FLIP[1]);
-        flashEl.style.opacity = 0.75 * bump(t, SHUTTER, xf(0.3));
+        instant.position.y = CAM_Y + 0.3 * camOut;
+        flashEl.style.opacity = 0.75 * bump(t, SHUTTER, FLASH);
 
         const eject = seg(t, EJECT[0], EJECT[1]);
         const flip = seg(t, FLIP[0], FLIP[1]);
         photoRig.visible = t >= EJECT[0];
         photoRig.position.copy(ejectFrom).lerp(ejectTo, eject).lerp(photoHome, flip);
-        photoRig.position.z = lerp(-0.05, 0, flip); // tucked behind the camera until it's out
         photoRig.rotation.y = lerp(Math.PI, 0, flip);
         photoRig.scale.setScalar(lerp(ejectScale, 1, flip));
+        // only the part below the slot shows while it comes out; once it's fully out, no clipping
+        slotClip.constant = t < EJECT[1] ? slotY : 1000;
 
         // photo + box: they hand over to the channel planes and don't come back
-        photoMat.opacity = 1 - seg(t, CHAN_T, CHAN_T + xf(0.8));
+        photoMat.opacity = 1 - seg(t, CHAN_T, CHAN_T + CHAN_IN);
         backMat.opacity = photoMat.opacity;
         photo.visible = photoMat.opacity > 0.001;
-        boxMat.opacity = seg(t, CROP[0], CROP[0] + xf(0.7)) * (1 - seg(t, CHAN_T, CHAN_T + xf(0.8)));
+        boxMat.opacity = seg(t, CROP[0], CROP[0] + BOX_IN) * (1 - seg(t, CHAN_T, CHAN_T + CHAN_IN));
         box.visible = boxMat.opacity > 0.001;
         const bs = lerp(1.5, 1, seg(t, CROP[0], CROP[1]));
         box.scale.set(bs, bs, 1);
 
-        // planes: split apart, slide back into one picture, then drop onto the belt as the sheet
+        // planes: split apart, slide back into one picture, then drop onto the belt, turning into
+        // the sheet partway down while the camera swings round
         const split = seg(t, SPLIT[0], SPLIT[1]);
         const norm = seg(t, NORM[0], NORM[1]);
         const merge = seg(t, MERGE[0], MERGE[1]);
         const drop = seg(t, DROP[0], DROP[1]);
-        const pOp = seg(t, CHAN_T, CHAN_T + xf(0.8)) * (1 - seg(t, LAND - 0.2, LAND + 0.3));
+        const dropLen = DROP[1] - DROP[0];
+        const toSheet = seg(t, DROP[0] + 0.35 * dropLen, DROP[0] + 0.75 * dropLen);
+        const pOp = seg(t, CHAN_T, CHAN_T + CHAN_IN) * (1 - toSheet);
+        const rx = lerp(lerp(lerp(Math.PI / 2, 0.5, split), Math.PI / 2, merge), 0, drop);
+        // the resize step shrinks the planes by the same proportion however big the split is
+        const ps = lerp(lerp(planeStart, 1, split) * lerp(1, 0.6, norm), SHEET_SCALES[0], drop);
         planes.forEach(({grp}, k) => {
             grp.visible = pOp > 0.001;
-            grp.rotation.x = lerp(lerp(lerp(Math.PI / 2, 0.5, split), Math.PI / 2, merge), 0, drop);
+            grp.rotation.x = rx;
             grp.rotation.y = lerp(0, Math.PI / 4, split) * (1 - merge);
             grp.position.copy(cropC).lerp(mid, split).lerp(sheetStart, drop);
-            grp.position.y += (k - 1) * 1.25 * split * lerp(1, 0.22, norm) * (1 - merge);
-            const s = lerp(lerp(planeStart, 1, split) * lerp(1, 0.6, norm), SHEET_SCALES[0], drop);
-            grp.scale.set(s, s, s);
+            grp.position.y += (k - 1) * 1.25 * GROW * split * lerp(1, 0.22, norm) * (1 - merge);
+            grp.scale.set(ps, ps, ps);
         });
-        if (pOp > 0.001) updatePlanes(split * lerp(1, 0.7, norm) * (1 - merge), norm * (1 - merge), norm, pOp);
+        if (pOp > 0.001) {
+            updatePlanes(split * lerp(1, 0.7, norm) * (1 - merge), norm * (1 - merge), norm, pOp, 0.09 * GROW * ps);
+        }
 
         // conveyor
         stage.visible = t > DROP[0] - 0.2 && t < RETURN[1] + 0.2;
         if (stage.visible) {
+            // the floor fades in early in the drop, so there's something to judge the move against
+            floor.material.opacity = seg(t, DROP[0], DROP[0] + 0.3 * dropLen);
             slatTex.offset.x = -sh.x / STRIPE;
-            sheetMat.opacity = seg(t, LAND - 0.3, LAND + 0.2);
+            sheetMat.opacity = toSheet;
             sheet.visible = sheetMat.opacity > 0.001;
-            sheet.position.set(sh.x, BELT_TOP + 0.01, 0);
-            sheet.scale.set(sh.s, sh.s, 1);
+            if (t < LAND) {
+                // still falling: ride along with the planes it's replacing
+                sheet.position.copy(planes[1].grp.position);
+                sheet.rotation.x = rx - Math.PI / 2;
+                sheet.scale.set(ps, ps, 1);
+            } else {
+                sheet.position.set(sh.x, BELT_TOP + 0.01, 0);
+                sheet.rotation.x = -Math.PI / 2;
+                sheet.scale.set(sh.s, sh.s, 1);
+            }
             if (sheet.visible) drawSheet(t);
             signs.forEach((sign) => {
                 sign.material.opacity = 1;
@@ -1207,23 +1294,23 @@ export function playCaptureAnimation(container, {
         // the normalised image rises up from the belt below and settles on the left
         cardEnd.set(stageX, PY, 0.1);
         cardFrom.set(stageX, PY - 6, 0.1);
-        const out = seg(t, RESULT_T - xf(0.4), RESULT_T + xf(1.2));
-        cardMat.opacity = seg(t, RESULT_T - xf(0.4), RESULT_T + xf(0.2));
+        const out = seg(t, RESULT_T - res(0.4), RESULT_T + res(1.2));
+        cardMat.opacity = seg(t, RESULT_T - res(0.4), RESULT_T + res(0.2));
         card.visible = cardMat.opacity > 0.001;
         card.position.copy(cardFrom).lerp(cardEnd, out);
         const cs = lerp(0.08, 1, out);
         card.scale.set(cs, cs, 1);
         card.rotation.y = lerp(Math.PI * 2, 0, out);
-        cardBoxMat.opacity = seg(t, RESULT_T + xf(0.8), RESULT_T + xf(1.4));
+        cardBoxMat.opacity = seg(t, RESULT_T + res(0.8), RESULT_T + res(1.4));
         cardBox.visible = cardBoxMat.opacity > 0.001;
         cardBox.position.set(cardEnd.x, cardEnd.y, cardEnd.z + 0.02);
-        resultLabel.material.opacity = seg(t, RESULT_T + xf(1), RESULT_T + xf(1.6));
+        resultLabel.material.opacity = seg(t, RESULT_T + res(1), RESULT_T + res(1.6));
         resultLabel.visible = resultLabel.material.opacity > 0.001;
         resultLabel.position.set(cardEnd.x - cardW / 2, cardEnd.y + cardH / 2 + 0.3, cardEnd.z + 0.05);
 
         // bars
-        barsEl.style.opacity = seg(t, SCORES_T, SCORES_T + xf(0.6));
-        const bk = seg(t, SCORES_T + xf(0.6), SCORES_T + xf(0.6) + xf(2));
+        barsEl.style.opacity = seg(t, SCORES_T, SCORES_T + BARS_IN);
+        const bk = seg(t, SCORES_T + BARS_IN, SCORES_T + BARS_IN + BARS_FILL);
         top.forEach(({confidence}, i) => {
             const v = clamp(confidence) * bk * 100;
             fills[i][0].style.width = `${v}%`;
