@@ -136,9 +136,10 @@ async function capturePokemon(imageRef, detection) {
     // Fallback: if there is no normalised image (no lock yet / request failed), use the captured frame
     const normalised = await normalisedRequest;
 
-    // dex entry for whatever the backend locked onto, dumped at the end of the animation
+    // dex entry for whatever the backend locked onto, dumped at the end of the animation. Not awaited:
+    // the database can be slow, and the animation only needs it at the very end
     const dexId = normalised?.dexId ?? detection?.dexId ?? null;
-    const info = dexId != null ? await getPokemonInfo(DEX_INFO_URL, dexId) : null;
+    const info = dexId != null ? getPokemonInfo(DEX_INFO_URL, dexId) : null;
 
     return {
         dexId,

@@ -3,6 +3,10 @@
 * Plays over the whole screen using the captured camera frame as the photo, and finishes on the
 * normalised crop from the backend.
 *
+* The model step is told as a conveyor belt: the picture rides past little workers who each
+* mark one kind of pattern on it (edges, curves, shapes, parts), then the parts vote. It's a
+* teaching picture of a generic convolutional classifier, not of the Pokédex's own recognisers.
+*
 * playCaptureAnimation(container, options) mounts it and returns a dispose function.
 * */
 import * as THREE from 'three';
@@ -21,20 +25,34 @@ const lerp = (a, b, k) => a + (b - a) * k;
 const DEBUG = true;
 const DEBUG_FPS = 60; // playback is time-based; the frame number is just t at this nominal rate
 
-// seeded so the sieve patterns and particles look the same every run
-function makeRnd(start) {
-    let seed = start;
-    return () => {
-        seed = (seed + 0x6D2B79F5) | 0;
-        let r = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-        r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
-        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-    };
-}
+// ---------- timeline ----------
+// The sheet lands on the belt at LAND, then travels to each station and waits there while the
+// workers mark it. Everything after the belt is timed off these so the stations can be retimed.
+const LAND = 13.6;
+const TRAVEL = 0.7;
+const WORK = 1.4;
+const STATION_X = [-1.9, -0.5, 0.9, 2.3];
+const STOPS = STATION_X.map((x, i) => {
+    const arrive = LAND + TRAVEL + i * (TRAVEL + WORK);
+    return {x, arrive, leave: arrive + WORK};
+});
+const DESK_T = STOPS[3].leave + TRAVEL; // sheet reaches the foreman
+const VOTE_END = DESK_T + 1.2;
+const SCORES_T = VOTE_END + 1.1;
+const RESULT_T = SCORES_T + 3.5;
+const END = RESULT_T + 4;
 
-// ---------- timeline + captions ----------
-const STEPS = [[0, 'Capture', 'The camera grabs a single frame.'], [2.5, 'Locate and crop', 'A detector finds the Pokémon and crops to it. This box does not come from the classifier.'], [5, 'Split into channels', 'Every pixel is three numbers from 0 to 255. OpenCV stores them as blue, green, red. Taller means brighter.'], [9, 'Resize and normalize', "Shrink to the model's input size and scale 0–255 down to 0.0–1.0. Still an ordered grid, nothing is scrambled."], [13, 'The model', 'Layers of learned filters (the weights) look for patterns: edges, then curves, then shapes, then parts. Matches combine and pass on; the rest is dropped.'], [20.5, 'Scores', 'The last layer gives one score per Pokémon. The highest wins.'], [25, 'Result', 'Out comes the normalised image the classifier worked on, with the name it gave.'],];
-const END = 29;
+const STEPS = [
+    [0, 'Capture', 'The camera grabs a single frame.'],
+    [2.5, 'Locate and crop', 'A detector finds the Pokémon and crops to it. This box does not come from the classifier.'],
+    [5, 'Split into channels', 'Every pixel is three numbers from 0 to 255. OpenCV stores them as blue, green, red. Taller means brighter.'],
+    [9, 'Resize and normalize', "Shrink to the model's input size and scale 0–255 down to 0.0–1.0. Still an ordered grid, nothing is scrambled."],
+    [13, 'The model', 'The picture rides past workers who each spot one small pattern and mark it wherever it appears. Nobody programmed them: they learned by practising on thousands of labelled photos.'],
+    [STOPS[1].arrive, 'Building on the marks', 'Each station only sees the marks made before it. Edges join into curves, curves into shapes, shapes into parts. We named the stations; the model has no names for them.'],
+    [DESK_T, 'The vote', 'The parts that were found are counted up as votes for each Pokémon.'],
+    [SCORES_T, 'Scores', 'The last layer gives one score per Pokémon. The highest wins.'],
+    [RESULT_T, 'Result', 'Out comes the normalised image the classifier worked on, with the name it gave.'],
+];
 const MAX_SCORE_ROWS = 4;
 
 // ---------- scene constants ----------
@@ -43,18 +61,32 @@ const PY = 0.3;
 const PLANE = 2.25; // longest side of the channel planes once lifted off the photo
 const GRID = 40; // channel grid resolution along a square crop
 const CHAN = [[0, 0, 1], [0, 1, 0], [1, 0, 0]]; // B, G, R (OpenCV order)
-const TH = 5;
-const TW = 2;
-const Y0 = 2.9;
-const YBOT = -TH / 2;
-const SY = [1.4, 0.3, -0.8, -1.9];
 const LCOL = ['#5ad1ff', '#7dff9b', '#ffd45a', '#ff7ad9'];
 const LNAME = ['edges', 'curves', 'shapes', 'parts'];
-const PARTICLES = 900;
-const KEEP = 0.58;
-const SPEED = 1.6;
-const PT0 = 13.2;
 const CARD = 3.4; // longest side of the final normalised image
+
+// the conveyor stage sits well below the photo, and the camera drops down to it
+const FLOOR = -9;
+const BELT_H = 0.5;
+const BELT_TOP = FLOOR + BELT_H;
+const BELT_W = 1.7;
+const BELT_X0 = -4.4;
+const BELT_X1 = 4.6;
+const START_X = -3.4;
+const DESK_X = 3.8;
+const STRIPE = 0.35; // spacing of the belt's slats
+const SHEET_SCALES = [0.62, 0.56, 0.5, 0.44]; // the sheet shrinks at each station, like a network's maps
+const STROKE_W = [5, 6, 8, 10]; // marks get bolder as they get fewer
+// belt camera: looking down ~35 degrees through a narrow lens, so it reads as near-orthographic
+const CAM_EL = 0.6;
+const CAM_YAW = -0.3;
+const CAM_FOV = 12;
+
+// ---------- worker look ----------
+const SKIN = ['#e3b08a', '#c98f62', '#8f5d3e', '#f2cfae'];
+const SHIRT = ['#ffb03b', '#f4d03f', '#ff8a5c'];
+const OVERALLS = ['#3e6ad6', '#2b9a8c', '#6a5acd'];
+const HAT = '#ffd23f';
 
 /*
 * Crop rectangle in source pixels: the bounding box of the detection quad, or a centred square
@@ -105,19 +137,284 @@ function sourceSize(source) {
     };
 }
 
+function canvasTexture(w, h, draw) {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    draw(c.getContext('2d'), w, h);
+    return new THREE.CanvasTexture(c);
+}
+
+/*
+* Flat cut-out for the 2.5D workers: depth-tested like a cardboard standee, with
+* alpha-to-coverage so the edges stay smooth without needing back-to-front sorting.
+* */
+function cutout(w, h, draw, px = 128) {
+    const map = canvasTexture(px, Math.round((px * h) / w), draw);
+    const mat = new THREE.MeshBasicMaterial({map, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide});
+    return new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+}
+
+function disc(x, cx, cy, r, color) {
+    x.fillStyle = color;
+    x.beginPath();
+    x.arc(cx, cy, r, 0, Math.PI * 2);
+    x.fill();
+}
+
+/*
+* One little construction worker: a body and a head as two separate circles, floating hands
+* and feet, after the sketch. Parts are separate meshes in a group so they can move on their own.
+* pencil: colour of the pencil in the drawing hand, or null for none.
+* */
+function makeWorker(n, {pencil = null, clipboard = false, hat = HAT} = {}) {
+    const skin = SKIN[n % SKIN.length];
+    const shirt = SHIRT[n % SHIRT.length];
+    const overalls = OVERALLS[(n + 1) % OVERALLS.length];
+    const group = new THREE.Group();
+
+    const body = cutout(0.46, 0.5, (x, w, h) => {
+        x.save();
+        x.beginPath();
+        x.ellipse(w / 2, h / 2, w / 2 - 2, h / 2 - 2, 0, 0, Math.PI * 2);
+        x.clip();
+        x.fillStyle = shirt;
+        x.fillRect(0, 0, w, h);
+        x.fillStyle = overalls;
+        x.fillRect(0, h * 0.5, w, h);
+        x.fillRect(w * 0.3, h * 0.36, w * 0.4, h * 0.2); // bib
+        x.fillRect(w * 0.24, h * 0.08, w * 0.09, h * 0.45); // straps
+        x.fillRect(w * 0.67, h * 0.08, w * 0.09, h * 0.45);
+        x.fillStyle = 'rgba(0,0,0,.18)';
+        x.fillRect(w * 0.4, h * 0.42, w * 0.2, h * 0.09); // pocket
+        x.restore();
+    });
+    body.userData.base = [0, 0.3, 0.002];
+
+    const head = cutout(0.34, 0.34, (x, w, h) => {
+        disc(x, w / 2, h * 0.58, w * 0.34, skin);
+        x.fillStyle = hat;
+        x.beginPath();
+        x.arc(w / 2, h * 0.48, w * 0.36, Math.PI, 0);
+        x.fill();
+        x.fillRect(w * 0.06, h * 0.44, w * 0.88, h * 0.08); // brim
+        x.fillStyle = 'rgba(255,255,255,.35)';
+        x.fillRect(w * 0.46, h * 0.14, w * 0.08, h * 0.3); // ridge
+    });
+    head.userData.base = [0, 0.64, 0.004];
+
+    const hand = (dx) => {
+        const m = cutout(0.12, 0.12, (x, w) => disc(x, w / 2, w / 2, w / 2 - 2, skin), 32);
+        m.userData.base = [dx, 0.3, 0.006];
+        return m;
+    };
+    const foot = (dx) => {
+        const m = cutout(0.13, 0.07, (x, w, h) => {
+            x.fillStyle = '#1d2433';
+            x.fillRect(0, 0, w, h);
+        }, 32);
+        m.userData.base = [dx, 0.035, 0];
+        return m;
+    };
+    const feet = [foot(-0.08), foot(0.08)];
+    const freeHand = hand(-0.27);
+    const parts = [body, head, freeHand, ...feet];
+
+    // the drawing hand lives outside the group so it can reach across the belt
+    let drawHand = null;
+    if (pencil) {
+        drawHand = cutout(0.32, 0.32, (x) => {
+            x.save();
+            x.translate(16, 112);
+            x.rotate(-Math.PI / 4);
+            x.fillStyle = '#2b2b2b';
+            x.beginPath();
+            x.moveTo(0, 0);
+            x.lineTo(9, -4);
+            x.lineTo(9, 4);
+            x.fill(); // lead
+            x.fillStyle = '#f0d2a0';
+            x.beginPath();
+            x.moveTo(9, -4);
+            x.lineTo(24, -8);
+            x.lineTo(24, 8);
+            x.lineTo(9, 4);
+            x.fill(); // wood
+            x.fillStyle = pencil;
+            x.fillRect(24, -8, 70, 16);
+            x.fillStyle = '#ff9eb5';
+            x.fillRect(94, -8, 12, 16); // rubber
+            x.restore();
+            disc(x, 86, 42, 20, skin);
+        });
+        // put the pencil tip at the mesh origin so positioning the hand positions the tip
+        drawHand.geometry.translate(0.12, 0.12, 0);
+    } else {
+        parts.push(hand(0.27));
+    }
+    if (clipboard) {
+        const board = cutout(0.22, 0.28, (x, w, h) => {
+            x.fillStyle = '#9a6a3f';
+            x.fillRect(0, 0, w, h);
+            x.fillStyle = '#f4f1e8';
+            x.fillRect(w * 0.12, h * 0.14, w * 0.76, h * 0.8);
+            x.fillStyle = '#b8c0cc';
+            for (let k = 0; k < 4; k += 1) x.fillRect(w * 0.2, h * (0.3 + k * 0.15), w * 0.6, 3);
+            x.fillStyle = '#c9ced6';
+            x.fillRect(w * 0.35, 0, w * 0.3, h * 0.12);
+        });
+        board.userData.base = [-0.3, 0.36, 0.005];
+        parts.push(board);
+        group.userData.board = board;
+    }
+    parts.forEach((m) => {
+        m.position.set(...m.userData.base);
+        group.add(m);
+    });
+    return {group, body, head, feet, drawHand};
+}
+
+// ---------- marks the workers draw, worked out from the real picture ----------
+function polyline(pts) {
+    const cum = [0];
+    for (let k = 1; k < pts.length; k += 1) {
+        cum.push(cum[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]));
+    }
+    return {pts, cum, len: cum[cum.length - 1] || 1};
+}
+
+function pointAt(line, p) {
+    const d = clamp(p) * line.len;
+    let k = 1;
+    while (k < line.pts.length - 1 && line.cum[k] < d) k += 1;
+    const a = line.pts[k - 1];
+    const b = line.pts[k];
+    const u = clamp((d - line.cum[k - 1]) / ((line.cum[k] - line.cum[k - 1]) || 1));
+    return [lerp(a[0], b[0], u), lerp(a[1], b[1], u)];
+}
+
+// greedy pick of the strongest candidates that aren't crowded together
+function spread(cands, n, minDist) {
+    const out = [];
+    cands.forEach((c) => {
+        if (out.length < n && out.every((o) => Math.hypot(o.i - c.i, o.j - c.j) >= minDist)) out.push(c);
+    });
+    return out;
+}
+
+/*
+* Strokes for each station, in sheet-canvas pixels. Edges come from the image gradient, curves
+* bend around the strongest edges, shapes and parts ring the busiest regions. It's a stand-in for
+* what real layers respond to, but it lands on the visitor's own picture.
+* */
+function makeStrokes(pixels, NX, NY, SHW, SHH) {
+    const lum = new Float32Array(NX * NY);
+    for (let k = 0; k < NX * NY; k += 1) {
+        lum[k] = (0.299 * pixels[k * 4] + 0.587 * pixels[k * 4 + 1] + 0.114 * pixels[k * 4 + 2]) / 255;
+    }
+    const L = (i, j) => lum[j * NX + i];
+    const mag = new Float32Array(NX * NY);
+    const grads = [];
+    for (let j = 1; j < NY - 1; j += 1) {
+        for (let i = 1; i < NX - 1; i += 1) {
+            const gx = L(i + 1, j - 1) + 2 * L(i + 1, j) + L(i + 1, j + 1)
+                - L(i - 1, j - 1) - 2 * L(i - 1, j) - L(i - 1, j + 1);
+            const gy = L(i - 1, j + 1) + 2 * L(i, j + 1) + L(i + 1, j + 1)
+                - L(i - 1, j - 1) - 2 * L(i, j - 1) - L(i + 1, j - 1);
+            const m = Math.hypot(gx, gy);
+            mag[j * NX + i] = m;
+            grads.push({i, j, gx, gy, m});
+        }
+    }
+    grads.sort((a, b) => b.m - a.m);
+
+    const cell = SHW / NX;
+    const px = (i, j) => [((i + 0.5) / NX) * SHW, ((j + 0.5) / NY) * SHH];
+    const ring = (cx, cy, rx, ry) => Array.from({length: 33}, (_, k) => {
+        const a = (k / 32) * Math.PI * 2 - Math.PI / 2;
+        return [cx + rx * Math.cos(a), cy + ry * Math.sin(a)];
+    });
+    const blocks = (size, step) => {
+        const out = [];
+        for (let by = 0; by + size <= NY; by += step) {
+            for (let bx = 0; bx + size <= NX; bx += step) {
+                let e = 0;
+                let si = 0;
+                let sj = 0;
+                for (let j = by; j < by + size; j += 1) {
+                    for (let i = bx; i < bx + size; i += 1) {
+                        const m = mag[j * NX + i];
+                        e += m;
+                        si += m * i;
+                        sj += m * j;
+                    }
+                }
+                out.push(e ? {i: si / e, j: sj / e, e} : {i: bx + size / 2, j: by + size / 2, e});
+            }
+        }
+        return out.sort((a, b) => b.e - a.e);
+    };
+
+    const edges = spread(grads, 16, 3.5).map(({i, j, gx, gy, m}) => {
+        const [cx, cy] = px(i, j);
+        const half = cell * 1.5;
+        const tx = -gy / (m || 1);
+        const ty = gx / (m || 1);
+        return [[cx - tx * half, cy - ty * half], [cx + tx * half, cy + ty * half]];
+    });
+    const curves = spread(grads, 9, 6).map(({i, j, gx, gy, m}) => {
+        const [cx, cy] = px(i, j);
+        const r = cell * 2.6;
+        const ox = cx + (gx / (m || 1)) * r;
+        const oy = cy + (gy / (m || 1)) * r;
+        const base = Math.atan2(cy - oy, cx - ox);
+        return Array.from({length: 13}, (_, k) => {
+            const a = base + lerp(-0.95, 0.95, k / 12);
+            return [ox + r * Math.cos(a), oy + r * Math.sin(a)];
+        });
+    });
+    const bs = Math.max(3, Math.round(Math.min(NX, NY) / 4));
+    const shapes = spread(blocks(bs, Math.max(1, Math.round(bs / 2))), 4, bs * 1.4).map(({i, j}, k) => {
+        const [cx, cy] = px(i, j);
+        const r = bs * 0.55 * cell;
+        return ring(cx, cy, r, k % 2 ? r * 0.75 : r);
+    });
+    const bp = Math.max(4, Math.round(Math.min(NX, NY) / 2.4));
+    const parts = spread(blocks(bp, Math.max(1, Math.round(bp / 2))), 3, bp).map(({i, j}) => {
+        const half = bp * 0.55 * cell;
+        const [x, y] = px(i, j);
+        const cx = clamp(x, half + 6, SHW - half - 6);
+        const cy = clamp(y, half + 6, SHH - half - 6);
+        return [[cx - half, cy - half], [cx + half, cy - half], [cx + half, cy + half], [cx - half, cy + half], [cx - half, cy - half]];
+    });
+
+    return [edges, curves, shapes, parts].map((list) => list.map((pts) => {
+        const line = polyline(pts);
+        const ys = pts.map((p) => p[1]);
+        const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+        line.side = cy < SHH / 2 ? -1 : 1; // far half goes to the worker behind the belt
+        line.centre = pointAt(line, 0);
+        if (pts.length > 3) {
+            const xs = pts.map((p) => p[0]);
+            line.centre = [(Math.min(...xs) + Math.max(...xs)) / 2, cy];
+        }
+        return line;
+    }));
+}
+
 /*
 * frame:      canvas/image of the captured still
 * normalised: canvas/image shown at the end (the /normalised crop)
 * quad:       normalised detection quad from the ws, optional
 * scores:     top5 from the ws, [{name, confidence}], optional
-* onClose:    called when the user closes the overlay
+* info:       dex entry, or a promise of one, shown under "Show data" at the end
+* onClose:   called when the user closes the overlay
 * */
 export function playCaptureAnimation(container, {
     frame, normalised, quad = null, scores = [], dexId = null, info = null, onClose,
 }) {
     // the animation was written against three r128, which had no colour management
     THREE.ColorManagement.enabled = false;
-    const rnd = makeRnd(7);
     const top = (scores ?? []).slice(0, MAX_SCORE_ROWS);
     const winner = top[0];
     const label = winner ? `${winner.name} ${Math.round(clamp(winner.confidence) * 100)}%` : 'No match';
@@ -309,133 +606,127 @@ export function playCaptureAnimation(container, {
         });
     }
 
-    // ---------- sieve tower ----------
-    const tower = new THREE.Group();
-    tower.rotation.set(0.28, 0.6, 0);
-    scene.add(tower);
-    const edgeMat = new THREE.LineBasicMaterial({color: 0x9aabc4, transparent: true, opacity: 0});
-    tower.add(new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(TW, TH, TW)), edgeMat));
+    // ---------- conveyor stage ----------
+    const stage = new THREE.Group();
+    scene.add(stage);
 
-    function sieveTex(L) {
-        const c = document.createElement('canvas');
-        c.width = 256;
-        c.height = 256;
-        const x = c.getContext('2d');
-        x.strokeStyle = 'rgba(200,215,240,.25)';
-        x.lineWidth = 1;
-        for (let p = 0; p <= 256; p += 16) {
-            x.beginPath();
-            x.moveTo(p, 0);
-            x.lineTo(p, 256);
-            x.moveTo(0, p);
-            x.lineTo(256, p);
-            x.stroke();
-        }
-        x.strokeStyle = LCOL[L];
-        x.lineWidth = 5;
-        x.lineCap = 'round';
-        for (let a = 0; a < 4; a += 1) {
-            for (let b = 0; b < 4; b += 1) {
-                const cx = 32 + a * 64;
-                const cy = 32 + b * 64;
-                const r = rnd() * Math.PI;
-                x.beginPath();
-                if (L === 0) {
-                    x.moveTo(cx - 18 * Math.cos(r), cy - 18 * Math.sin(r));
-                    x.lineTo(cx + 18 * Math.cos(r), cy + 18 * Math.sin(r));
-                } else if (L === 1) {
-                    x.arc(cx, cy, 16, r, r + Math.PI * 1.1);
-                } else if (L === 2) {
-                    if ((a + b) % 2) {
-                        x.arc(cx, cy, 16, 0, Math.PI * 2);
-                    } else {
-                        x.moveTo(cx, cy - 18);
-                        x.lineTo(cx + 17, cy + 14);
-                        x.lineTo(cx - 17, cy + 14);
-                        x.closePath();
-                    }
-                } else if ((a + b) % 2) {
-                    x.ellipse(cx, cy, 8, 18, r, 0, Math.PI * 2);
-                } else {
-                    x.arc(cx, cy, 14, 0, Math.PI * 2);
-                    x.moveTo(cx + 5, cy);
-                    x.arc(cx, cy, 5, 0, Math.PI * 2);
-                }
-                x.stroke();
-            }
-        }
-        return new THREE.CanvasTexture(c);
-    }
-
-    const sieves = SY.map((y, L) => {
-        const m = new THREE.Mesh(new THREE.PlaneGeometry(TW, TW), new THREE.MeshBasicMaterial({
-            map: sieveTex(L),
-            transparent: true,
-            opacity: 0,
-            side: THREE.DoubleSide,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-        }));
-        m.rotation.x = -Math.PI / 2;
-        m.position.y = y;
-        tower.add(m);
-        const lab = textSprite(`Layer ${L + 1}: ${LNAME[L]}`, LCOL[L], 2.2);
-        return {m, lab};
+    const floorTex = canvasTexture(64, 64, (x) => {
+        x.strokeStyle = 'rgba(154,171,196,.09)';
+        x.lineWidth = 2;
+        x.strokeRect(0, 0, 64, 64);
     });
-    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.14, 20, 20), new THREE.MeshBasicMaterial({
-        color: 0xffd45a,
-        transparent: true,
-        opacity: 0
-    }),);
-    orb.position.y = YBOT - 0.35;
-    tower.add(orb);
+    floorTex.wrapS = THREE.RepeatWrapping;
+    floorTex.wrapT = THREE.RepeatWrapping;
+    floorTex.repeat.set(30 / 0.8, 16 / 0.8);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 16), new THREE.MeshBasicMaterial({
+        map: floorTex, transparent: true, depthWrite: false,
+    }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = FLOOR;
+    stage.add(floor);
 
-    // particles falling through the sieves
-    const parts = [];
-    const ppos = new Float32Array(PARTICLES * 3);
-    const pcol = new Float32Array(PARTICLES * 3);
-    for (let i = 0; i < PARTICLES; i += 1) {
-        let kl = 0;
-        while (kl < 4 && rnd() < KEEP) kl += 1;
-        parts.push({x: (rnd() - 0.5) * 1.4, z: (rnd() - 0.5) * 1.4, d: rnd() * 2.2, kl, g: 0.35 + rnd() * 0.4});
-    }
-    const pgeo = new THREE.BufferGeometry();
-    pgeo.setAttribute('position', new THREE.BufferAttribute(ppos, 3));
-    pgeo.setAttribute('color', new THREE.BufferAttribute(pcol, 3));
-    const pmat = new THREE.PointsMaterial({
-        size: 0.1,
-        map: dotTex,
-        vertexColors: true,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        opacity: 0,
+    // flat colours per face fake the lighting, so the belt reads as raised without shading
+    const beltLen = BELT_X1 - BELT_X0;
+    const slatTex = canvasTexture(64, 16, (x) => {
+        x.fillStyle = '#3a4a63';
+        x.fillRect(0, 0, 64, 16);
+        x.fillStyle = '#2f3d54';
+        x.fillRect(0, 0, 10, 16);
     });
-    tower.add(new THREE.Points(pgeo, pmat));
-    const LC = LCOL.map((h) => new THREE.Color(h));
+    slatTex.wrapS = THREE.RepeatWrapping;
+    slatTex.repeat.set(beltLen / STRIPE, 1);
+    const endMat = new THREE.MeshBasicMaterial({color: 0x2a374d});
+    const frontMat = new THREE.MeshBasicMaterial({color: 0x1d2738});
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(beltLen, BELT_H, BELT_W), [
+        endMat, endMat, new THREE.MeshBasicMaterial({map: slatTex}), frontMat, frontMat, frontMat,
+    ]);
+    belt.position.set((BELT_X0 + BELT_X1) / 2, FLOOR + BELT_H / 2, 0);
+    stage.add(belt);
+    const railMat = new THREE.MeshBasicMaterial({color: 0x56688a});
+    [-1, 1].forEach((s) => {
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(beltLen, 0.07, 0.07), railMat);
+        rail.position.set(belt.position.x, BELT_TOP + 0.035, s * (BELT_W / 2 - 0.035));
+        stage.add(rail);
+    });
 
-    function updateParticles(t) {
-        const tl = t - PT0;
-        parts.forEach((p, i) => {
-            const y = Y0 - SPEED * Math.max(0, tl - p.d);
-            let a = 1;
-            if (p.kl < 4 && y < SY[p.kl]) a = 1 - clamp((SY[p.kl] - y) / 0.35);
-            if (y < YBOT) a *= 1 - clamp((YBOT - y) / 0.5);
-            let passed = 0;
-            for (let L = 0; L < 4; L += 1) if (y < SY[L] && L < p.kl) passed = L + 1;
-            const f = lerp(1, 0.15, clamp((Y0 - y) / (Y0 - YBOT)));
-            const out = (p.kl < 4 && y < SY[p.kl]) ? 1 + (SY[p.kl] - y) * 2 : 1;
-            ppos[i * 3] = p.x * f * out;
-            ppos[i * 3 + 1] = Math.max(y, YBOT - 0.4);
-            ppos[i * 3 + 2] = p.z * f * out;
-            const c = passed ? LC[passed - 1] : {r: p.g, g: p.g, b: p.g * 1.1};
-            pcol[i * 3] = c.r * a;
-            pcol[i * 3 + 1] = c.g * a;
-            pcol[i * 3 + 2] = c.b * a;
+    const shadowTex = canvasTexture(64, 32, (x) => {
+        const g = x.createRadialGradient(32, 16, 0, 32, 16, 30);
+        g.addColorStop(0, 'rgba(0,0,0,.45)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        x.fillStyle = g;
+        x.scale(1, 0.5);
+        x.fillRect(0, 0, 64, 64);
+    });
+    const shadowGeo = new THREE.PlaneGeometry(0.55, 0.26);
+    const shadowMat = new THREE.MeshBasicMaterial({map: shadowTex, transparent: true, depthWrite: false});
+
+    // the sheet: the dot matrix the workers draw on, redrawn from t every frame so scrubbing works
+    const SHW = ca >= 1 ? 512 : Math.round(512 * ca);
+    const SHH = ca >= 1 ? Math.round(512 / ca) : 512;
+    const sheetC = document.createElement('canvas');
+    sheetC.width = SHW;
+    sheetC.height = SHH;
+    const shx = sheetC.getContext('2d');
+    const sheetTex = new THREE.CanvasTexture(sheetC);
+    const sheetMat = new THREE.MeshBasicMaterial({map: sheetTex, transparent: true, opacity: 0});
+    const sheet = new THREE.Mesh(new THREE.PlaneGeometry(2 * SX, 2 * SZ), sheetMat);
+    sheet.rotation.x = -Math.PI / 2;
+    stage.add(sheet);
+
+    const strokes = makeStrokes(pixels, NX, NY, SHW, SHH);
+
+    // workers: one behind and one in front of the belt at each station, then a foreman at the desk
+    let wn = 0;
+    const workers = [];
+    function addWorker(opts, place) {
+        const wk = makeWorker(wn, opts);
+        wn += 1;
+        const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+        shadow.rotation.x = -Math.PI / 2;
+        stage.add(wk.group, shadow);
+        if (wk.drawHand) stage.add(wk.drawHand);
+        const w = {...wk, ...place, shadow, phase: wn * 1.7};
+        workers.push(w);
+        return w;
+    }
+    STOPS.forEach((st, L) => {
+        [[-1, -0.3], [1, 0.6]].forEach(([s, dx]) => {
+            // share the station's work window out between this worker's strokes
+            const list = strokes[L].filter((line) => line.side === s);
+            const slot = (WORK - 0.2) / Math.max(1, list.length);
+            list.forEach((line, k) => {
+                line.t0 = st.arrive + 0.1 + k * slot + slot * 0.25;
+                line.t1 = line.t0 + slot * 0.75;
+            });
+            addWorker({pencil: LCOL[L]}, {x: st.x + dx, side: s, arrive: st.arrive, leave: st.leave, list});
         });
-        pgeo.attributes.position.needsUpdate = true;
-        pgeo.attributes.color.needsUpdate = true;
-    }
+    });
+    const foreman = addWorker({clipboard: true, hat: '#f4f1e8'}, {
+        x: DESK_X + 0.15, side: -1, arrive: DESK_T, leave: VOTE_END, list: [],
+    });
+
+    const signs = [...LNAME.map((n, L) => [`${L + 1}. ${n}`, LCOL[L], STOPS[L].x]), ['the vote', '#e9eef7', DESK_X]]
+        .map(([text, color, x]) => {
+            const sign = textSprite(text, color, 1.2);
+            sign.position.set(x - 0.45, BELT_TOP + 1.05, -BELT_W / 2 - 0.5);
+            stage.add(sign);
+            return sign;
+        });
+
+    // parts fly off the sheet into the foreman's clipboard as votes
+    const voteTex = canvasTexture(64, 64, (x) => {
+        x.fillStyle = 'rgba(255,122,217,.25)';
+        x.fillRect(6, 6, 52, 52);
+        x.strokeStyle = LCOL[3];
+        x.lineWidth = 6;
+        x.strokeRect(6, 6, 52, 52);
+    });
+    const votes = strokes[3].map((line, i) => {
+        const v = new THREE.Sprite(new THREE.SpriteMaterial({map: voteTex, transparent: true, depthWrite: false}));
+        v.userData = {line, t0: DESK_T + 0.15 + i * 0.3};
+        stage.add(v);
+        return v;
+    });
 
     // ---------- the normalised image that comes out of the model ----------
     const {w: nw, h: nh} = sourceSize(normalised);
@@ -454,6 +745,8 @@ export function playCaptureAnimation(container, {
 
     // ---------- layout ----------
     let aspect = 1;
+    let frontDist = 10;
+    let stageX = 0;
 
     function resize() {
         const w = canvas.clientWidth;
@@ -462,25 +755,177 @@ export function playCaptureAnimation(container, {
         renderer.setSize(w, h, false);
         aspect = w / h;
         camera.aspect = aspect;
-        camera.position.set(0, 0, Math.max(10, 2.7 / (0.4142 * aspect)));
-        camera.updateProjectionMatrix();
+        frontDist = Math.max(10, 2.7 / (0.4142 * aspect));
         // eslint-disable-next-line no-nested-ternary
-        tower.position.set(aspect > 1.3 ? -2.2 : aspect > 0.9 ? -1.3 : 0, -0.3, 0);
+        stageX = aspect > 1.3 ? -2.2 : aspect > 0.9 ? -1.3 : 0;
     }
 
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(canvas);
     resize();
 
+    // ---------- belt state at time t ----------
+    function sheetAt(t) {
+        let from = {x: START_X, s: SHEET_SCALES[0]};
+        let t0 = LAND;
+        for (let i = 0; i < STOPS.length; i += 1) {
+            const st = STOPS[i];
+            if (t < st.arrive) {
+                const k = ease((t - t0) / TRAVEL);
+                return {x: lerp(from.x, st.x, k), s: lerp(from.s, SHEET_SCALES[i], k)};
+            }
+            from = {x: st.x, s: SHEET_SCALES[i]};
+            t0 = st.leave;
+            if (t < st.leave) return from;
+        }
+        return {x: lerp(from.x, DESK_X, ease((t - t0) / TRAVEL)), s: from.s};
+    }
+
+    function sheetToWorld([px, py], sh, out) {
+        return out.set(sh.x + (px / SHW - 0.5) * 2 * SX * sh.s, BELT_TOP + 0.012, (py / SHH - 0.5) * 2 * SZ * sh.s);
+    }
+
+    // where a worker's pencil is, in sheet pixels: drawing a stroke, or moving to the next one
+    function tipAt(list, t) {
+        for (let k = 0; k < list.length; k += 1) {
+            const line = list[k];
+            if (t < line.t0) {
+                if (!k) return line.pts[0];
+                const prev = list[k - 1];
+                const a = pointAt(prev, 1);
+                const u = ease((t - prev.t1) / (line.t0 - prev.t1));
+                return [lerp(a[0], line.pts[0][0], u), lerp(a[1], line.pts[0][1], u)];
+            }
+            if (t <= line.t1) return pointAt(line, (t - line.t0) / (line.t1 - line.t0));
+        }
+        return pointAt(list[list.length - 1], 1);
+    }
+
+    // marks fade as the next station builds on them, the same way the dots fade under the marks
+    const faded = (L, t) => (L + 1 < STOPS.length ? seg(t, STOPS[L + 1].leave, STOPS[L + 1].leave + 0.6) : 0);
+    function drawSheet(t) {
+        const x = shx;
+        x.globalAlpha = 1;
+        x.shadowBlur = 0;
+        x.fillStyle = '#0a1220';
+        x.fillRect(0, 0, SHW, SHH);
+        x.strokeStyle = '#2a3b58';
+        x.lineWidth = 8;
+        x.strokeRect(4, 4, SHW - 8, SHH - 8);
+
+        const da = 1 - 0.65 * seg(t, STOPS[0].leave, STOPS[0].leave + 0.6)
+            - 0.25 * seg(t, STOPS[1].leave, STOPS[1].leave + 0.6)
+            - 0.1 * seg(t, STOPS[2].leave, STOPS[2].leave + 0.6);
+        if (da > 0.01) {
+            // only the cells the resize step kept
+            const r = (SHW / NX) * 0.85;
+            for (let j = 0; j < NY; j += 2) {
+                for (let i = 0; i < NX; i += 2) {
+                    const p = (j * NX + i) * 4;
+                    x.fillStyle = `rgba(${pixels[p]},${pixels[p + 1]},${pixels[p + 2]},${da})`;
+                    x.beginPath();
+                    x.arc(((i + 0.5) / NX) * SHW, ((j + 0.5) / NY) * SHH, r, 0, Math.PI * 2);
+                    x.fill();
+                }
+            }
+        }
+
+        x.lineCap = 'round';
+        x.lineJoin = 'round';
+        strokes.forEach((list, L) => {
+            const fade = L === 3 ? 0.75 * seg(t, DESK_T, DESK_T + 0.8) : 0.6 * faded(L, t);
+            x.globalAlpha = 1 - fade;
+            x.strokeStyle = LCOL[L];
+            x.shadowColor = LCOL[L];
+            x.shadowBlur = 10;
+            x.lineWidth = STROKE_W[L] * (SHW / 512);
+            list.forEach((line) => {
+                const p = clamp((t - line.t0) / (line.t1 - line.t0));
+                if (!(p > 0)) return;
+                const d = p * line.len;
+                x.beginPath();
+                x.moveTo(...line.pts[0]);
+                for (let k = 1; k < line.pts.length; k += 1) {
+                    if (line.cum[k] <= d) {
+                        x.lineTo(...line.pts[k]);
+                    } else {
+                        x.lineTo(...pointAt(line, p));
+                        break;
+                    }
+                }
+                x.stroke();
+            });
+        });
+        sheetTex.needsUpdate = true;
+    }
+
+    // ---------- camera: front view for the photo, dropping to the belt for the model ----------
+    const camTarget = new THREE.Vector3();
+    const beltTarget = new THREE.Vector3();
+    const camDir = new THREE.Vector3();
+
+    function placeCamera(t, sheetX) {
+        const k = seg(t, 11.3, 13.3) * (1 - seg(t, VOTE_END, VOTE_END + 1.4));
+        const frontH = 2 * frontDist * Math.tan(THREE.MathUtils.degToRad(22.5));
+        const h = lerp(frontH, Math.max(3.4, 5.4 / aspect), k);
+        const fov = lerp(45, CAM_FOV, k);
+        const el = lerp(0, CAM_EL, k);
+        const yaw = lerp(0, CAM_YAW, k);
+        beltTarget.set(clamp(sheetX, START_X + 1, DESK_X - 0.6), BELT_TOP + 0.3, 0);
+        camTarget.set(0, 0, 0).lerp(beltTarget, k);
+        // keep the framed height fixed while the lens narrows, so the zoom reads as a move
+        const dist = h / 2 / Math.tan(THREE.MathUtils.degToRad(fov / 2));
+        camDir.set(Math.sin(yaw) * Math.cos(el), Math.sin(el), Math.cos(yaw) * Math.cos(el));
+        camera.position.copy(camTarget).addScaledVector(camDir, dist);
+        camera.lookAt(camTarget);
+        camera.fov = fov;
+        camera.near = Math.max(0.1, dist - 30);
+        camera.far = dist + 30;
+        camera.updateProjectionMatrix();
+        return {yaw, stretch: 1 / Math.cos(el)};
+    }
+
     // ---------- render at time t ----------
     const tmp = new THREE.Vector3();
-    const topW = new THREE.Vector3();
-    const orbW = new THREE.Vector3();
+    const tmp2 = new THREE.Vector3();
+    const sheetStart = new THREE.Vector3(START_X, BELT_TOP + 0.01, 0);
     const cardEnd = new THREE.Vector3();
+    const cardFrom = new THREE.Vector3();
     const mid = new THREE.Vector3(0, 0.2, 0);
     let lastStep = -1;
 
+    function placeWorker(w, t, view, sh) {
+        const a = seg(t, w.arrive - 0.5, w.arrive) * (1 - seg(t, w.leave, w.leave + 0.6));
+        const z = w.side * lerp(BELT_W / 2 + 0.45, BELT_W / 2 + 0.18, a);
+        // three steps in, three steps out; the feet are down whenever a is 0 or 1
+        const step = Math.sin(a * Math.PI * 6);
+        const bob = 0.008 * Math.sin(t * 3 + w.phase) + 0.02 * Math.abs(step) + (w.extraBob ?? 0);
+        w.group.position.set(w.x, FLOOR, z);
+        w.group.rotation.y = view.yaw;
+        w.group.scale.set(1, view.stretch, 1);
+        w.group.children.forEach((m) => {
+            const [bx, by, bz] = m.userData.base;
+            m.position.set(bx, by + (by > 0.1 ? bob : 0), bz);
+        });
+        w.feet[0].position.y += Math.max(0, step) * 0.05;
+        w.feet[1].position.y += Math.max(0, -step) * 0.05;
+        w.shadow.position.set(w.x, FLOOR + 0.004, z);
+
+        if (!w.drawHand) return;
+        w.group.updateMatrixWorld();
+        const rest = w.group.localToWorld(tmp.set(0.1, 0.19 + bob, 0.008));
+        const reach = w.list.length
+            ? seg(t, w.arrive - 0.15, w.arrive + 0.15) * (1 - seg(t, w.leave - 0.15, w.leave + 0.15)) : 0;
+        if (reach > 0) rest.lerp(sheetToWorld(tipAt(w.list, t), sh, tmp2), reach);
+        w.drawHand.position.copy(rest);
+        w.drawHand.rotation.y = view.yaw;
+        w.drawHand.scale.set(1, view.stretch, 1);
+    }
+
     function render(t) {
+        const sh = sheetAt(t);
+        const view = placeCamera(t, sh.x);
+
         // flash
         // eslint-disable-next-line no-nested-ternary
         flashEl.style.opacity = t < 0.8 ? (t < 0.2 ? t / 0.2 : clamp(1 - (t - 0.2) / 0.6)) : 0;
@@ -492,63 +937,75 @@ export function playCaptureAnimation(container, {
         const bs = lerp(1.5, 1, seg(t, 2.5, 3.4));
         box.scale.set(bs, bs, 1);
 
-        // planes
-        tower.updateMatrixWorld();
-        topW.copy(tower.localToWorld(tmp.set(0, Y0 - 0.1, 0)));
+        // planes: split apart, then fold back together and drop onto the belt as one sheet
         const split = seg(t, 5.8, 7.6);
         const norm = seg(t, 9, 11.5);
-        const move = seg(t, 11, 12.8);
-        const pOp = seg(t, 5, 5.8) * (1 - seg(t, 13, 14));
+        const move = seg(t, 11, 13.2);
+        const pOp = seg(t, 5, 5.8) * (1 - seg(t, 13.2, 13.7));
         planes.forEach(({grp}, k) => {
             grp.visible = pOp > 0.001;
-            grp.rotation.x = lerp(lerp(Math.PI / 2, 0.5, split), 0.28, move);
-            grp.rotation.y = lerp(lerp(0, Math.PI / 4, split), 0.6, move);
-            grp.position.copy(cropC).lerp(mid, split).lerp(topW, move);
-            grp.position.y += (k - 1) * 1.25 * split * lerp(1, 0.22, norm);
-            const s = lerp(planeStart, 1, split) * lerp(1, 0.6, norm);
+            grp.rotation.x = lerp(lerp(Math.PI / 2, 0.5, split), 0, move);
+            grp.rotation.y = lerp(lerp(0, Math.PI / 4, split), 0, move);
+            grp.position.copy(cropC).lerp(mid, split).lerp(sheetStart, move);
+            grp.position.y += (k - 1) * 1.25 * split * lerp(1, 0.22, norm) * (1 - move);
+            const s = lerp(lerp(planeStart, 1, split) * lerp(1, 0.6, norm), SHEET_SCALES[0], move);
             grp.scale.set(s, s, s);
         });
-        if (pOp > 0.001) updatePlanes(split * lerp(1, 0.7, norm), norm, norm, pOp);
+        if (pOp > 0.001) updatePlanes(split * lerp(1, 0.7, norm) * (1 - move), norm * (1 - move), norm, pOp);
 
-        // tower + particles
-        const tA = seg(t, 12.3, 13.2) * (1 - seg(t, 24.5, 25.3));
-        tower.visible = tA > 0.001;
-        edgeMat.opacity = tA * 0.55;
-        sieves.forEach(({m, lab}, L) => {
-            const st = PT0 + (Y0 - SY[L]) / SPEED;
-            const bump = clamp(Math.min((t - st) / 0.3, (st + 2.6 - t) / 0.6));
-            m.material.opacity = tA * (0.22 + 0.7 * bump);
-            lab.material.opacity = tA * (0.45 + 0.55 * bump);
-            lab.visible = lab.material.opacity > 0.001;
-            lab.position.copy(tower.localToWorld(tmp.set(0, SY[L], 0)));
-            lab.position.x += aspect > 0.9 ? 1.6 : 1.1;
-            const ls = aspect > 0.9 ? 2.2 : 1.5;
-            lab.scale.set(ls, (ls * 96) / 512, 1);
-        });
-        pmat.opacity = tA;
-        if (tA > 0.001) updateParticles(t);
-        orb.material.opacity = tA * seg(t, 16.5, 19);
+        // conveyor
+        stage.visible = t > 10.8 && t < VOTE_END + 1.6;
+        if (stage.visible) {
+            slatTex.offset.x = -sh.x / STRIPE;
+            sheetMat.opacity = seg(t, 13, 13.5);
+            sheet.visible = sheetMat.opacity > 0.001;
+            sheet.position.set(sh.x, BELT_TOP + 0.01, 0);
+            sheet.scale.set(sh.s, sh.s, 1);
+            if (sheet.visible) drawSheet(t);
+            signs.forEach((sign) => {
+                sign.material.opacity = 1;
+            });
 
-        // the normalised image rises out of the orb and settles where the tower was
-        orbW.copy(tower.localToWorld(tmp.set(0, YBOT - 0.35, 0)));
-        cardEnd.set(tower.position.x, PY, 0.1);
-        const out = seg(t, 24.6, 26.2);
-        cardMat.opacity = seg(t, 24.6, 25.2);
+            foreman.extraBob = 0;
+            votes.forEach((v) => {
+                const k = (t - v.userData.t0) / 0.55;
+                foreman.extraBob += 0.05 * clamp(1 - Math.abs(k - 1) / 0.3);
+            });
+            workers.forEach((w) => placeWorker(w, t, view, sh));
+
+            foreman.group.updateMatrixWorld();
+            const boardW = foreman.group.userData.board.getWorldPosition(tmp2);
+            votes.forEach((v) => {
+                const k = clamp((t - v.userData.t0) / 0.55);
+                v.visible = k > 0 && k < 1;
+                if (!v.visible) return;
+                sheetToWorld(v.userData.line.centre, sh, v.position).lerp(boardW, ease(k));
+                v.position.y += Math.sin(Math.PI * k) * 0.5;
+                const vs = lerp(0.3, 0.12, k);
+                v.scale.set(vs, vs, 1);
+            });
+        }
+
+        // the normalised image rises up from the belt below and settles on the left
+        cardEnd.set(stageX, PY, 0.1);
+        cardFrom.set(stageX, PY - 6, 0.1);
+        const out = seg(t, RESULT_T - 0.4, RESULT_T + 1.2);
+        cardMat.opacity = seg(t, RESULT_T - 0.4, RESULT_T + 0.2);
         card.visible = cardMat.opacity > 0.001;
-        card.position.copy(orbW).lerp(cardEnd, out);
+        card.position.copy(cardFrom).lerp(cardEnd, out);
         const cs = lerp(0.08, 1, out);
         card.scale.set(cs, cs, 1);
         card.rotation.y = lerp(Math.PI * 2, 0, out);
-        cardBoxMat.opacity = seg(t, 25.8, 26.4);
+        cardBoxMat.opacity = seg(t, RESULT_T + 0.8, RESULT_T + 1.4);
         cardBox.visible = cardBoxMat.opacity > 0.001;
         cardBox.position.set(cardEnd.x, cardEnd.y, cardEnd.z + 0.02);
-        resultLabel.material.opacity = seg(t, 26, 26.6);
+        resultLabel.material.opacity = seg(t, RESULT_T + 1, RESULT_T + 1.6);
         resultLabel.visible = resultLabel.material.opacity > 0.001;
         resultLabel.position.set(cardEnd.x - cardW / 2, cardEnd.y + cardH / 2 + 0.3, cardEnd.z + 0.05);
 
         // bars
-        barsEl.style.opacity = seg(t, 20, 20.6);
-        const bk = seg(t, 20.6, 22.6);
+        barsEl.style.opacity = seg(t, SCORES_T - 0.5, SCORES_T + 0.1);
+        const bk = seg(t, SCORES_T + 0.1, SCORES_T + 2.1);
         top.forEach(({confidence}, i) => {
             const v = clamp(confidence) * bk * 100;
             fills[i][0].style.width = `${v}%`;
@@ -587,7 +1044,13 @@ export function playCaptureAnimation(container, {
     root.querySelector('[data-act="close"]').onclick = () => onClose?.();
     const infoBtn = root.querySelector('[data-act="info"]');
     const infoEl = root.querySelector('.cap-info');
-    infoEl.textContent = info ? JSON.stringify(info, null, 2) : `No dex data for dexId ${dexId}`;
+    // info can still be on its way (a promise) when the animation starts
+    let disposed = false;
+    infoEl.textContent = 'Loading dex data…';
+    Promise.resolve(info).then((data) => {
+        if (disposed) return;
+        infoEl.textContent = data ? JSON.stringify(data, null, 2) : `No dex data for dexId ${dexId}`;
+    });
     infoBtn.onclick = () => {
         infoEl.hidden = !infoEl.hidden;
     };
@@ -630,15 +1093,17 @@ export function playCaptureAnimation(container, {
     frameId = requestAnimationFrame(loop);
 
     return function dispose() {
+        disposed = true;
         cancelAnimationFrame(frameId);
         resizeObserver.disconnect();
         window.removeEventListener('keydown', onKey);
         scene.traverse((obj) => {
             obj.geometry?.dispose();
-            if (obj.material) {
-                obj.material.map?.dispose();
-                obj.material.dispose();
-            }
+            [obj.material].flat().forEach((m) => {
+                if (!m) return;
+                m.map?.dispose();
+                m.dispose();
+            });
         });
         dotTex.dispose();
         renderer.dispose();
