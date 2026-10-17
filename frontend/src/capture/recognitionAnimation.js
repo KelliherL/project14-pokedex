@@ -67,7 +67,7 @@ const TIMING = {
     barsFill: 4.2,
     // result
     beforeResult: 1.05,
-    resultRise: 3.36, // normalised image rises up and settles
+    resultRise: 1.36, // normalised image rises up and settles
     resultLabels: 1.26, // red box and name appear
     resultHold: 1.5,
 };
