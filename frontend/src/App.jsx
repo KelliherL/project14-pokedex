@@ -9,6 +9,235 @@ const DEX_INFO_URL = 'http://localhost:8000/Pokemon/'
 const WS_URL = 'ws://localhost:8000/ws';
 const RECONNECT_DELAY_MS = 1000;
 
+// Settings
+// Controls lights of the UI and explanation text (probably needs updating)
+const LOCKED_SIGMA = 4;
+const UNSURE_BELOW = 0.5;
+// Alternate idle screen
+const SHOW_PANEL_WHEN_IDLE = true;   
+// How often to refresh the rectified view while a card is detected
+const RECTIFIED_REFRESH_MS = 1000;
+
+// Wording for the small explanation line under the bars
+const explain = (d) => {
+  if (!d) return 'Waiting for a card...';
+  if ((d.sigma ?? 0) >= LOCKED_SIGMA) return `Locked on. Best match: ${d.top5?.[0]?.name ?? '?'}.`;
+  return 'Looking... hold the card steady.';
+};
+
+// Type colours (idk if these are needed)
+const TYPE_COLORS = {
+  Bug: '#8c9a1c', Dark: '#4a3a32', Dragon: '#5a54d6',
+  Electric: '#f0a000', Fairy: '#d98ad9', Fighting: '#7a3418',
+  Fire: '#e0481a', Flying: '#7f95e8', Ghost: '#4a4a9c',
+  Grass: '#3a9a28', Ground: '#b89a4a', Ice: '#58c8e8',
+  Normal: '#9a9a8a', Poison: '#8a3a9a', Psychic: '#e8386a',
+  Rock: '#a08a3a', Steel: '#8a8a9a', Water: '#2878e0',
+};
+
+const ART_URL = (id) => `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${id}.png`;
+
+// Rectified card, normalised live while a card is detected
+function LiveRectified({active}) {
+  const [tick, setTick] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setTick((t) => t + 1), RECTIFIED_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [active]);
+
+  const showing = active && loaded;
+  return (<div className="rect">
+    {active && (<img
+      src={`${NORMALISED_IMG_URL}?t=${tick}`}
+      alt="rectified card"
+      onLoad={() => setLoaded(true)}
+      onError={() => setLoaded(false)}
+      style={{display: showing ? 'block' : 'none'}}
+    />)}
+    {!showing && <span className="small">Rectified view</span>}
+  </div>);
+}
+
+// Rectified card, as an image when the scan was captured
+function FrozenRectified({source}) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !source) return;
+    canvas.width = source.naturalWidth || source.width;
+    canvas.height = source.naturalHeight || source.height;
+    canvas.getContext('2d').drawImage(source, 0, 0);
+  }, [source]);
+
+  return <div className="rect"><canvas ref={canvasRef}/></div>;
+}
+
+// Confidence panel
+// Shows the rectified card, the top 5 matches, and a confidence bar for each
+function ConfidencePanel({detection, rectified, className = ''}) {
+  const sigma = detection?.sigma ?? 0;
+  const percent = Math.min(100, Math.max(0, (sigma / 6) * 100));
+  const topFive = detection?.top5 ?? [];
+
+  return (<div className={`card ${className}`}>
+    <h2>Confidence</h2>
+    <div className="track sigma">
+      <div className="fill" style={{width: `${percent}%`, background: 'var(--accent)'}}/>
+    </div>
+
+    <div className="conf-body">
+      {rectified}
+      <div className="rows">
+        {/* Top 5 */}
+        {Array.from({length: 5}, (_, i) => topFive[i]).map((s, i) => (
+          <div key={i} className={`row ${i === 0 && s ? 'win' : ''}`}>
+            <span>{s?.name ?? '---'}</span>
+            <div className="track">
+              <div className="fill" style={{width: `${(s?.confidence ?? 0) * 100}%`}}/>
+            </div>
+            <span>{((s?.confidence ?? 0) * 100).toFixed(0)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <p className="small explain">{explain(detection)}</p>
+  </div>);
+}
+
+// Camera screen
+function CameraView({detection, camImgRef}) {
+  const showPanel = detection || SHOW_PANEL_WHEN_IDLE;
+
+  return (<div className={`view ${showPanel ? '' : 'solo'}`}>
+
+    <div className="feed">
+      <CameraCanvas ref={camImgRef} detection={detection}/>
+
+      {!detection && (<div className="overlay">
+        {/* Camera icon */}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <rect x="2" y="6" width="20" height="14" rx="2"/>
+          <circle cx="12" cy="13" r="4"/>
+          <path d="M8 6l1.5-2h5L16 6"/>
+        </svg>
+        <h2>Live Camera View</h2>
+        <p>Place a Pokémon card or figurine in front of the camera</p>
+      </div>)}
+    </div>
+
+    {showPanel && (<div className="min-h-0">
+      <ConfidencePanel detection={detection} rectified={<LiveRectified active={!!detection}/>}/>
+      <p className="small" style={{marginTop: '1.2cqw'}}>Hold steady, then press the big black button to scan.</p>
+    </div>)}
+
+  </div>);
+}
+
+// Result screen
+function ResultView({outcome, onBack}) {
+  const {info, dexId, scores, sigma, normalised} = outcome;
+  const name = info?.name ?? scores[0]?.name ?? 'Unknown';
+
+  // Speak button function
+  const speak = () => {
+
+  };
+
+  return (<div className="view result">
+
+    <div className="art">
+      {dexId != null && <img src={ART_URL(dexId)} alt={name}/>}
+    </div>
+
+    <div className="card">
+      <h1>{name}</h1>
+      <p className="small">{info?.genus}</p>
+
+      <div className="pills">
+        {(info?.types ?? []).map((t) => (
+          <span key={t} className="pill" style={{background: TYPE_COLORS[t]}}>{t}</span>
+        ))}
+      </div>
+
+      <p>{info?.flavor}</p>
+
+      <div className="buttons">
+        <button type="button" className="btn" onClick={speak}>Hear it</button>
+        <button type="button" className="btn" onClick={onBack}>Scan again</button>
+      </div>
+    </div>
+
+    <ConfidencePanel
+      className="wide"
+      detection={{sigma, top5: scores}}
+      rectified={<FrozenRectified source={normalised}/>}
+    />
+
+  </div>);
+}
+
+// Unsure screen
+function UnsureView({onBack}) {
+  return (<div className="view solo">
+    <div className="card unsure">
+      <div className="q">?</div>
+      <h1>Unsure</h1>
+      <p>Tip: improve the lighting and fill more of the frame.</p>
+      <button type="button" className="btn" onClick={onBack}>Try again</button>
+    </div>
+  </div>);
+}
+
+// Pokedex body and screen picker
+function Pokedex(props) {
+  const {camImgRef, onScan, onBack, detection, outcome} = props;
+
+  const unsure = outcome && (outcome.dexId == null || (outcome.scores[0]?.confidence ?? 0) < UNSURE_BELOW);
+
+  // idle = red light, scanning = yellow light, locked = green light
+  let status = 'idle';
+  if (outcome) status = unsure ? 'scanning' : 'locked';
+  else if (detection) status = (detection.sigma ?? 0) >= LOCKED_SIGMA ? 'locked' : 'scanning';
+
+  return (<div className="dex">
+    <div className="shell">
+
+      <div className="top">
+        <div className="lens" data-on={status !== 'idle'}/>
+        <div className="lights">
+          <b className="light r" data-on={status === 'idle'}/>
+          <b className="light y" data-on={status === 'scanning'}/>
+          <b className="light g" data-on={status === 'locked'}/>
+        </div>
+      </div>
+
+      <div className="bezel">
+        <div className="screen">
+          {/* Choose the screen to display */}
+          {!outcome && <CameraView detection={detection} camImgRef={camImgRef}/>}
+          {outcome && unsure && <UnsureView onBack={onBack}/>}
+          {outcome && !unsure && <ResultView outcome={outcome} onBack={onBack}/>}
+          {props.animation}
+          <div className="crt"/>
+        </div>
+      </div>
+
+      <div className="foot">
+        <div className="grille"><i/><i/><i/></div>
+        <span className="slot"/>
+        <button type="button" className="slot blue" onClick={onBack} aria-label="Back"/>
+        <button type="button" className="big" onClick={onScan} aria-label="Scan"/>
+      </div>
+
+    </div>
+  </div>);
+}
+
 /*
 * This function handles ws connections via a url
 * */
@@ -94,34 +323,6 @@ function CameraCanvas({detection, ref}) {
 }
 
 /*
-* Mock confidence panel derived from the json ws from the mock backend
-* */
-function ConfidencePanel({detection}) {
-  // confidence not displayed till data returned
-  const sigma = detection?.sigma ?? 0;
-  const percent = Math.min(100, Math.max(0, (sigma / 6) * 100));
-  const detectionOutput = {...detection};
-  //TODO Top five should always be present, with results being 0 across all when not available
-  const topFive = detection?.top5;
-
-  return (<div className="border w-full h-full p-4">
-    <h1 className="text-center font-bold">Confidence</h1>
-    <div className="mt-4 h-4 w-full bg-black/30 rounded overflow-hidden">
-      <div
-        className="h-full bg-green-400 transition-[width] duration-100"
-        style={{width: `${percent}%`}}
-      />
-    </div>
-    <div className="mt-4 space-y-1">
-      {Array.isArray(topFive) && topFive.map((item, index) => (<p k={index} className="test-xs flex justify-between">
-        <span>{item.name}</span>
-        <span className="font-mono">{(item.confidence * 100).toFixed(2)}%</span>
-      </p>))}
-    </div>
-  </div>);
-}
-
-/*
 * Freezes the current stream frame and fetches the normalised crop, ready for the animation.
 * The detection is snapshotted too so the quad and scores match the moment of capture.
 * */
@@ -140,7 +341,9 @@ async function capturePokemon(imageRef, detection) {
   const info = dexId != null ? await getPokemonInfo(DEX_INFO_URL, dexId) : null;
 
   return {
-    dexId, info, frame, normalised: normalised?.image ?? frame, quad: detection?.quad ?? null, scores: detection?.top5 ?? [],
+    dexId, info, frame, normalised: normalised?.image ?? frame, quad: detection?.quad ?? null,
+    scores: detection?.top5 ?? [],
+    sigma: detection?.sigma ?? 0,
   };
 }
 
@@ -148,6 +351,7 @@ async function capturePokemon(imageRef, detection) {
 function App() {
   const detection = useDetection(WS_URL);
   const [capture, setCapture] = useState(null);
+  const [outcome, setOutcome] = useState(null);
 
   const camImgRef = useRef(null);
 
@@ -157,19 +361,17 @@ function App() {
   };
 
   return (<div className="relative">
-    <CaptureAnimation capture={capture} onClose={() => setCapture(null)}/>
-    <div id="main-div" className="h-screen grid grid-cols-3 p-10">
-      <div className="bg-green-600 col-span-2 grid place-items-center p-10">
-        <CameraCanvas ref={camImgRef} detection={detection}/>
-        <button onClick={handleCapture} type="button"
-                className="pl-4 pr-4 pb-2 pt-2 rounded-md bg-red-800 text-white hover:bg-red-950 hover:cursor-pointer">Capture
-          Pokemon
-        </button>
-      </div>
-      <div className="bg-blue-600 col-span-1 grid place-items-center p-10">
-        <ConfidencePanel detection={detection}/>
-      </div>
-    </div>
+    <Pokedex
+      animation={<CaptureAnimation capture={capture} onClose={() => {
+        setOutcome(capture);
+        setCapture(null);
+      }}/>}
+      detection={detection}
+      camImgRef={camImgRef}
+      outcome={outcome}
+      onScan={outcome ? () => setOutcome(null) : handleCapture}
+      onBack={() => setOutcome(null)}
+    />
   </div>);
 }
 
