@@ -16,7 +16,7 @@
     --accent: #d95763; /* rose */
     --win: #fbf236; /* yellow */
     --pixel: Silkscreen, "Atkinson Hyperlegible", system-ui, sans-serif; /* headings, labels, buttons */
-    position: fixed;
+    position: absolute; /* fills whatever it's mounted in: the Pokédex screen */
     inset: 0;
     z-index: 50;
     overflow: hidden;
@@ -38,17 +38,6 @@
 /* drawn at low resolution and blown up without smoothing, for the pixel look */
 .cap-stage canvas.pixelated {
     image-rendering: pixelated;
-}
-
-/* faux CRT scanlines over the whole animation, matching the Pokédex screen's .crt in App.css.
-   Above the scene and panels, below the debug readouts */
-.cap-stage::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 5;
-    pointer-events: none;
-    background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .07) 0 1px, transparent 1px 3px);
 }
 
 .cap-flash {

@@ -187,6 +187,19 @@ Rules for further theming work:
 
 ## Open items
 
+- **Pokédex zoom (18 Oct 2026, uncommitted, not yet checked by the user)**: main's new UI mounts the
+  animation inside the Pokédex `.screen`. `.cap-stage` is now `position: absolute` (fills the
+  screen). On capture, `useScreenZoom` in `App.jsx` measures a 16:9 box centred in the
+  camera feed (`.anim-slot`, where the animation plays; the confidence panel stays beside it) and
+  scales and moves the `.shell` with a CSS transform until that box covers the window, over `ZOOM_SECONDS` (exported from
+  `recognitionAnimation.js` = `CAM_FADE[1]`, the camera part of the animation), stays zoomed until
+  close, then zooms out. Main's `.crt` scanlines sit above the animation (z-index 60) and scale
+  with the zoom. While busy (capture pressed until the zoom-out ends) the foot buttons are
+  `disabled` and the screens are `inert`. `layoutResult()` divides page measurements by the zoom.
+  Everything in the animation, text included, appears enlarged by the zoom (about 1.6x); `PIXEL`
+  may need retuning. The `max-aspect-ratio` media query in the CSS still looks at the window, not
+  the screen.
+
 - **Sheet shrinking**: the sheet shrinks at each station (`SHEET_SCALES`, 100% → 71%) to mirror
   feature maps getting smaller. The user called it "weird"; I asked whether to keep it, soften it
   or remove it, and that's still unanswered.

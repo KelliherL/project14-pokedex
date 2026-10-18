@@ -109,6 +109,9 @@ const SCORES_T = RETURN[1] - 0.2; // bars start fading in just before the camera
 const BARS = span(SCORES_T + T.barsIn, T.barsFill);
 const RESULT = span(BARS[0] + T.resultAfterBars, T.resultRise); // overlaps the bars filling
 const END = Math.max(RESULT[1] + T.resultLabels, BARS[1]) + T.resultHold;
+// the Pokédex zooms into its screen over the camera part of the animation (pop in, flash, photo
+// out, camera fades), and back out over the same time when the animation is closed
+export const ZOOM_SECONDS = CAM_FADE[1];
 
 const STEPS = [
     [0, 'Capture', 'The camera grabs a single frame.'],
@@ -1510,9 +1513,11 @@ export function playCaptureAnimation(container, {
         const h = canvas.clientHeight;
         if (!w || !h) return;
         const box = root.getBoundingClientRect();
+        // page measurements include the Pokédex's zoom; divide it back out to get layout pixels
+        const zoom = box.width / root.offsetWidth || 1;
         const rel = (el) => {
             const r = el.getBoundingClientRect();
-            return {left: r.left - box.left, top: r.top - box.top, bottom: r.bottom - box.top};
+            return {left: (r.left - box.left) / zoom, top: (r.top - box.top) / zoom, bottom: (r.bottom - box.top) / zoom};
         };
         const bars = rel(barsEl);
         const halfH = frontDist * Math.tan(THREE.MathUtils.degToRad(22.5));

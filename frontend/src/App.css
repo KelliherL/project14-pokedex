@@ -43,6 +43,14 @@
   border: .6cqw solid var(--shell-edge);
   border-radius: 7cqw;
   box-shadow: inset 0 -1.2cqw 0 var(--shell-dark), 0 2cqw 0 rgba(0, 0, 0, .35);
+  /* the zoom into the screen for the capture animation (useScreenZoom in App.jsx) */
+  transform-origin: 0 0;
+  transition: transform var(--zoom-time, .6s) ease-in-out;
+}
+
+/* nothing scrolls while a capture plays and the Pokédex is zoomed in */
+.dex.zooming {
+  overflow: hidden;
 }
 
 .top {
@@ -128,11 +136,34 @@
   color: var(--ink);
 }
 
-/* Scanlines */
+/* the screens; a wrapper only so they can all be made inert while a capture plays */
+.views {
+  display: contents;
+}
+
+/* the capture animation's 16:9 box over the camera feed; placed by useScreenZoom in App.jsx */
+.anim-slot {
+  position: absolute;
+  z-index: 50;
+}
+
+/* the animation is laid out at a fixed 16:9 size (ANIM_LAYOUT_WIDTH in App.jsx) and scaled down
+   to fit the box, so its panels and text don't crowd the small screen */
+.anim-slot .cap-stage {
+  inset: auto;
+  top: 0;
+  left: 0;
+  width: var(--anim-w, 100%);
+  aspect-ratio: 16 / 9;
+  transform: scale(var(--anim-fit, 1));
+  transform-origin: 0 0;
+}
+
+/* Scanlines, over the capture animation too (its stage is z-index 50) */
 .crt {
   position: absolute;
   inset: 0;
-  z-index: 3;
+  z-index: 60;
   pointer-events: none;
   background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .07) 0 1px, transparent 1px 3px);
 }
@@ -208,6 +239,8 @@
 }
 
 .big:hover { background: #333; }
+.foot button:disabled { cursor: default; filter: none; }
+.big:disabled { background: #111; }
 .big:active { transform: translateY(.3cqw); }
 
 

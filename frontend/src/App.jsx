@@ -1,6 +1,7 @@
 import './App.css';
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import CaptureAnimation from './capture/CaptureAnimation.jsx';
+import {ZOOM_SECONDS} from './capture/recognitionAnimation';
 import {fetchNormalised, getPokemonInfo, grabFrame} from './capture/captureFrame';
 
 const STREAM_URL = 'http://localhost:8000/stream';
@@ -17,6 +18,10 @@ const UNSURE_BELOW = 0.5;
 const SHOW_PANEL_WHEN_IDLE = true;   
 // How often to refresh the rectified view while a card is detected
 const RECTIFIED_REFRESH_MS = 1000;
+// The capture animation is laid out at this width (and 16:9 height), then scaled to fit its box on
+// the screen, so its text and panels keep the proportions they have full screen. Smaller = bigger
+// text and panels in the animation
+const ANIM_LAYOUT_WIDTH = 1280;
 
 // Wording for the small explanation line under the bars
 const explain = (d) => {
@@ -193,9 +198,61 @@ function UnsureView({onBack}) {
   </div>);
 }
 
+// For the capture animation: finds a 16:9 box centred where the camera feed is (the animation plays
+// in it, the confidence panel stays beside it), and zooms the Pokédex in until that box covers the
+// whole window, then back out. The shell is moved and scaled with a CSS transform, so everything on
+// the screen, scanlines included, scales together. Page measurements are divided by the current
+// zoom, so it can all be redone on a window resize while zoomed in.
+function useScreenZoom(zoomed, shellRef, screenRef) {
+  const [transform, setTransform] = useState('none');
+  const [slot, setSlot] = useState(null); // where the animation goes, in the screen's layout pixels
+
+  useLayoutEffect(() => {
+    if (!zoomed) {
+      setTransform('none');
+      return undefined;
+    }
+    const fit = () => {
+      const shell = shellRef.current;
+      const screen = screenRef.current;
+      if (!shell || !screen) return;
+      const sr = screen.getBoundingClientRect();
+      const z = sr.width / screen.offsetWidth || 1;
+      // the camera feed's inside, or the whole screen if the feed isn't showing
+      const feed = screen.querySelector('.feed') ?? screen;
+      const fr = feed.getBoundingClientRect();
+      const inner = feed === screen ? 0 : 1;
+      const fx = (fr.left - sr.left) / z - screen.clientLeft + inner * feed.clientLeft;
+      const fy = (fr.top - sr.top) / z - screen.clientTop + inner * feed.clientTop;
+      const w = Math.min(feed.clientWidth, (feed.clientHeight * 16) / 9);
+      const h = (w * 9) / 16;
+      const box = {left: fx + (feed.clientWidth - w) / 2, top: fy + (feed.clientHeight - h) / 2, width: w, height: h};
+      setSlot(box);
+
+      const parent = shell.offsetParent?.getBoundingClientRect() ?? {left: 0, top: 0};
+      // multiplied the height and width by 1.1x here to make the viewport a little bigger
+      const scale = Math.max(window.innerWidth / (w*1.1), window.innerHeight / (h*1.1));
+      // middle of the box, from the shell's top left corner (the transform's origin)
+      const cx = shell.clientLeft + screen.offsetLeft + screen.clientLeft + box.left + w / 2;
+      const cy = shell.clientTop + screen.offsetTop + screen.clientTop + box.top + h / 2;
+      const tx = window.innerWidth / 2 - (parent.left + shell.offsetLeft) - scale * cx;
+      const ty = window.innerHeight / 2 - (parent.top + shell.offsetTop) - scale * cy;
+      setTransform(`translate(${tx}px, ${ty}px) scale(${scale})`);
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [zoomed, shellRef, screenRef]);
+
+  return {transform, slot};
+}
+
 // Pokedex body and screen picker
 function Pokedex(props) {
-  const {camImgRef, onScan, onBack, detection, outcome} = props;
+  const {camImgRef, onScan, onBack, detection, outcome, zoomed, busy} = props;
+  const shellRef = useRef(null);
+  const screenRef = useRef(null);
+  const {transform, slot} = useScreenZoom(zoomed, shellRef, screenRef);
 
   const unsure = outcome && (outcome.dexId == null || (outcome.scores[0]?.confidence ?? 0) < UNSURE_BELOW);
 
@@ -204,8 +261,8 @@ function Pokedex(props) {
   if (outcome) status = unsure ? 'scanning' : 'locked';
   else if (detection) status = (detection.sigma ?? 0) >= LOCKED_SIGMA ? 'locked' : 'scanning';
 
-  return (<div className="dex">
-    <div className="shell">
+  return (<div className={`dex ${busy ? 'zooming' : ''}`} style={{'--zoom-time': `${ZOOM_SECONDS}s`}}>
+    <div className="shell" ref={shellRef} style={{transform}}>
 
       <div className="top">
         <div className="lens" data-on={status !== 'idle'}/>
@@ -217,12 +274,19 @@ function Pokedex(props) {
       </div>
 
       <div className="bezel">
-        <div className="screen">
-          {/* Choose the screen to display */}
-          {!outcome && <CameraView detection={detection} camImgRef={camImgRef}/>}
-          {outcome && unsure && <UnsureView onBack={onBack}/>}
-          {outcome && !unsure && <ResultView outcome={outcome} onBack={onBack}/>}
-          {props.animation}
+        <div className="screen" ref={screenRef}>
+          {/* Choose the screen to display; nothing on it reacts while a capture is playing */}
+          <div className="views" inert={busy}>
+            {!outcome && <CameraView detection={detection} camImgRef={camImgRef}/>}
+            {outcome && unsure && <UnsureView onBack={onBack}/>}
+            {outcome && !unsure && <ResultView outcome={outcome} onBack={onBack}/>}
+          </div>
+          {/* the capture animation, over the camera feed; outside .views so its own buttons still work */}
+          <div className="anim-slot" style={slot ? {
+            ...slot,
+            '--anim-w': `${ANIM_LAYOUT_WIDTH}px`,
+            '--anim-fit': slot.width / ANIM_LAYOUT_WIDTH,
+          } : undefined}>{props.animation}</div>
           <div className="crt"/>
         </div>
       </div>
@@ -230,8 +294,8 @@ function Pokedex(props) {
       <div className="foot">
         <div className="grille"><i/><i/><i/></div>
         <span className="slot" data-label="Select"/>
-        <button type="button" className="slot blue" onClick={onBack} aria-label="Back" data-label="History"/>
-        <button type="button" className="big" onClick={onScan} aria-label="Scan" data-label="Capture"/>
+        <button type="button" className="slot blue" onClick={onBack} disabled={busy} aria-label="Back" data-label="History"/>
+        <button type="button" className="big" onClick={onScan} disabled={busy} aria-label="Scan" data-label="Capture"/>
       </div>
 
     </div>
@@ -353,12 +417,18 @@ function App() {
   const detection = useDetection(WS_URL);
   const [capture, setCapture] = useState(null);
   const [outcome, setOutcome] = useState(null);
+  // from pressing capture until the zoom back out has finished; the Pokédex's buttons are
+  // disabled meanwhile so nothing can interrupt the animation
+  const [busy, setBusy] = useState(false);
 
   const camImgRef = useRef(null);
 
   const handleCapture = async () => {
+    if (busy) return;
+    setBusy(true);
     const result = await capturePokemon(camImgRef, detection);
     if (result) setCapture(result);
+    else setBusy(false);
   };
 
   return (<div className="relative">
@@ -368,7 +438,10 @@ function App() {
         setOutcome({...capture, info: null});
         Promise.resolve(capture.info).then((info) => setOutcome((o) => (o?.frame === capture.frame ? {...o, info} : o)));
         setCapture(null);
+        setTimeout(() => setBusy(false), ZOOM_SECONDS * 1000); // once the zoom back out is done
       }}/>}
+      zoomed={capture != null}
+      busy={busy}
       detection={detection}
       camImgRef={camImgRef}
       outcome={outcome}
