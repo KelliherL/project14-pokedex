@@ -40,6 +40,17 @@
     image-rendering: pixelated;
 }
 
+/* faux CRT scanlines over the whole animation, matching the Pokédex screen's .crt in App.css.
+   Above the scene and panels, below the debug readouts */
+.cap-stage::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .07) 0 1px, transparent 1px 3px);
+}
+
 .cap-flash {
     position: absolute;
     inset: 0;
@@ -109,7 +120,7 @@
     right: 4%;
     top: 50%;
     transform: translateY(-50%);
-    width: min(360px, 36vw);
+    width: min(400px, 40vw);
     padding: 0 0 12px;
     overflow: hidden;
     opacity: 0;
@@ -121,21 +132,28 @@
 }
 
 .cap-bars .cap-empty {
-    margin: 8px 16px 0;
+    grid-column: 1 / -1;
+    margin: 0;
     color: var(--muted);
 }
 
-.cap-row {
+/* one grid for all the rows, so the name column is as wide as the longest name */
+.cap-rows {
     display: grid;
-    grid-template-columns: 92px 1fr 46px;
-    gap: 8px;
+    grid-template-columns: max-content minmax(60px, 1fr) max-content;
+    gap: 10px 10px;
     align-items: center;
-    margin: 8px 16px;
+    margin: 10px 16px 2px;
     font-size: 1rem;
+}
+
+.cap-row {
+    display: contents;
 }
 
 .cap-row > span:first-child {
     font-family: var(--pixel);
+    max-width: 190px; /* only very long names get cut short */
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

@@ -39,7 +39,9 @@ polish work without re-reading the history.
   the value you like into `DITHER`). Arrow keys move the slider, not the frame, while it's focused.
 - Verify changes with `npx vite build` in `frontend/` (there's no visual test). `npx eslint` on
   this file fails to parse `??` (pre-existing config issue), so don't rely on it.
-- **Checking the look yourself** (worked well during the retheme): make a throwaway
+- **Visual checks are the user's job**: they said not to take screenshots to check work (17 Oct
+  2026). Verify with `npx vite build` and hand over; they'll screenshot and annotate. Only if they
+  ask for it, this recipe works: make a throwaway
   `frontend/preview-tmp/index.html` that imports `/src/capture/recognitionAnimation.js`, draws a
   stand-in photo on a canvas, calls `playCaptureAnimation(document.body, {frame, normalised: frame,
   scores: [...], onClose() {}})`, then on the next animation frame dispatches a Space keydown
@@ -77,7 +79,7 @@ Top of file, in order:
    `DESK_X`, `SHEET_SCALES`, `STROKE_W`, belt camera (`CAM_EL`, `CAM_YAW`, `CAM_FOV`), vote camera
    (`CAM_VOTE_EL`, `VOTE_FRAME`), `FLOOR_FADE` / `FLOOR_FADE_SOFT` (oval floor fade), `SECTION_NAMES`,
    `SECTION_FLOOR` / `SECTION_BADGE` / `FLOOR_GRID` / `TAPE_COL` (the dimmed floor colours),
-   `LAMP_H`, `TAPE`, worker look (`WORKER_SCALE`, `SKIN`, `SHIRT`, `OVERALLS`, `HAT`,
+   `LAMP_H`, `TAPE`, worker look (`WORKER_SCALE`, `SKIN`, `OUTFITS`, `HAT`,
    `FOREMAN_HAT`, `INK` for outlines, `WORKER_LIGHT` for how the lamps light them).
 4. **Helpers**: `cutout()` (flat alpha-to-coverage planes for the 2.5D workers), `makeWorker()`
    (detached body/head/hands/feet; the pencil hand is separate so it can reach the sheet; the
@@ -160,6 +162,10 @@ Rules for further theming work:
 
 ## User preferences and working conventions
 
+- Editing tool quirk: the Edit tool sometimes refuses exact matches in these CRLF files right after
+  they've changed on disk. A small Python find-and-replace (read/write with `newline=''`, map `
+`
+  to the file's line ending, assert one match) works reliably.
 - **Never commit** (the user said so explicitly for this work). Leave changes in the working tree;
   only provide a commit message if asked.
 
@@ -188,13 +194,23 @@ Rules for further theming work:
   The user hasn't seen it yet.
 - **Recent untested changes**: the vote timing (votes wait for the camera, counts at 85% of each
   flight, `countLine` and `jokeLine`), and the cable and floor fade-out at the end of the return.
-- **Retheme state (16 Oct 2026)**: done and liked by the user, all **uncommitted** in
-  `recognitionAnimation.js`, `recognitionAnimation.css` and this doc. The user plans more changes
-  in the next session; nothing specific yet. Offered but not taken up: making the floor tape match
+- **Retheme state**: committed by the user (`07cb801`, `30d59eb`). Offered but not taken up: making the floor tape match
   the belt-side tape (`sideTape` → `TAPE_COL`), and keeping the photo snapped to `PAL` only rather
   than `PAL` + `ADJUSTED`.
-- Canvas text drawn before the pixel font loads (badges, bubble, name plate) is redrawn once it
-  loads; this hasn't been confirmed in a real browser, only in headless shots where it fell back.
+- **Fixes from the user's 17 Oct review, uncommitted and waiting for their check**:
+  - Floor layers drew in the wrong order (grid over the tape and badges). Now fixed with
+    `renderOrder`: section colour -1, grid 0, tape 1, badge 2, worker shadows 3, lamp light 5.
+  - Uniforms: shirt and overall colours were mixed independently, giving orange on green and a
+    "minion" yellow on blue. Now fixed pairs in `OUTFITS` (five, against four skin tones).
+  - Result: the card starts rising `TIMING.resultAfterBars` (1s) after the bars start filling
+    (was after they finished; replaces `beforeResult`). `END` waits for whichever finishes last.
+  - Result layout: `layoutResult()` centres the card and name plate as one group in the free space
+    (left of the scores panel, between caption and buttons; across the width when the panel is at
+    the bottom), measured from the DOM on resize and on each step change. Replaces the fixed
+    `stageX` guesses. `PLATE_GAP` = card top to plate middle. The plate is centred over the card.
+  - Name plate: Silkscreen's `%` read oddly, so the `%` alone is drawn in Atkinson.
+  - Scores panel: rows share one grid (`.cap-rows`, rows are `display: contents`) so the name
+    column fits the longest name; panel widened to `min(400px, 40vw)`.
 - The user mentioned "more things" planned after this core polish; nothing specific yet.
 
 ## Future idea: "How does it actually see?" FAQ page

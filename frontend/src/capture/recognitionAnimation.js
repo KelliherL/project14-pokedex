@@ -66,8 +66,8 @@ const TIMING = {
     barsIn: 1.26,
     barsFill: 4.2,
     // result
-    beforeResult: 1.05,
-    resultRise: 1.36, // normalised image rises up and settles
+    resultAfterBars: 1, // the image starts rising this long after the bars start filling
+    resultRise: 3.36, // normalised image rises up and settles
     resultLabels: 1.26, // red box and name appear
     resultHold: 1.5,
 };
@@ -107,8 +107,8 @@ const VOTE_END = COUNT[1] + T.countLine + T.jokeLine;
 const RETURN = span(VOTE_END, T.cameraReturn); // camera rises back to the front view
 const SCORES_T = RETURN[1] - 0.2; // bars start fading in just before the camera settles
 const BARS = span(SCORES_T + T.barsIn, T.barsFill);
-const RESULT = span(BARS[1] + T.beforeResult, T.resultRise);
-const END = RESULT[1] + T.resultLabels + T.resultHold;
+const RESULT = span(BARS[0] + T.resultAfterBars, T.resultRise); // overlaps the bars filling
+const END = Math.max(RESULT[1] + T.resultLabels, BARS[1]) + T.resultHold;
 
 const STEPS = [
     [0, 'Capture', 'The camera grabs a single frame.'],
@@ -164,6 +164,7 @@ const LCOL = [PAL.ice, PAL.lime, PAL.yellow, PAL.pink];
 const GUESS_COL = [PAL.rose, PAL.orange, PAL.sky, PAL.teal];
 const PART_MARKS = 8; // parts shared out between the guesses by score
 const CARD = 3.4; // longest side of the final normalised image
+const PLATE_GAP = 0.48; // from the top of the result card to the middle of its name plate
 
 // the instant camera at the start
 const CAMW = 5.2;
@@ -209,8 +210,15 @@ const TAPE = 0.25; // width of the hazard tape between sections
 // ---------- worker look ----------
 const WORKER_SCALE = 1.9;
 const SKIN = [PAL.peach, PAL.tan, PAL.rust, PAL.umber];
-const SHIRT = [PAL.orange, PAL.yellow, PAL.rose];
-const OVERALLS = [PAL.sea, PAL.teal, PAL.royal];
+// [shirt, overalls], picked as pairs so the combinations stay workwear-like. Five of them, against
+// four skin tones, so the same skin and outfit don't always come together
+const OUTFITS = [
+    [PAL.rose, PAL.sea],
+    [PAL.mist, PAL.indigo],
+    [PAL.orange, PAL.stone],
+    [PAL.khaki, PAL.umber],
+    [PAL.steel, PAL.violet],
+];
 // hard hats painted like balls: [top, spots]. Workers get Poké Balls, the foreman a Master Ball
 const HAT = [PAL.red, null];
 const FOREMAN_HAT = [PAL.violet, PAL.pink];
@@ -371,8 +379,7 @@ function drawInstantCamera(x, w, h) {
 * */
 function makeWorker(n, {pencil = null, clipboard = false, hat = HAT} = {}) {
     const skin = SKIN[n % SKIN.length];
-    const shirt = SHIRT[n % SHIRT.length];
-    const overalls = OVERALLS[(n + 1) % OVERALLS.length];
+    const [shirt, overalls] = OUTFITS[n % OUTFITS.length];
     const group = new THREE.Group();
 
     const body = cutout(0.46, 0.5, (x, w, h) => {
@@ -889,29 +896,42 @@ export function playCaptureAnimation(container, {
     // stay readable once the scene is pixelated
     function textSprite(text, color, w) {
         const map = textTexture(512, 112, (x, cw, ch) => {
-            x.font = `700 52px ${FONT}`;
-            const pw = Math.min(cw - 8, x.measureText(text).width + 56);
+            // Silkscreen's % is hard to read, so that sign alone is drawn in the body font
+            const parts = text.split(/(%)/).filter(Boolean)
+                .map((p) => ({p, font: `700 52px ${p === '%' ? '"Atkinson Hyperlegible", system-ui, sans-serif' : FONT}`}));
+            parts.forEach((part) => {
+                x.font = part.font;
+                Object.assign(part, {w: x.measureText(part.p).width});
+            });
+            const textW = parts.reduce((a, part) => a + part.w, 0);
+            const pw = Math.min(cw - 8, textW + 64);
+            const px = (cw - pw) / 2; // centred, so the plate sits centred over the card
             x.fillStyle = INK;
             x.beginPath();
-            x.roundRect(4, 4, pw, ch - 8, 16);
+            x.roundRect(px, 4, pw, ch - 8, 16);
             x.fill();
             x.fillStyle = color;
             x.beginPath();
-            x.roundRect(12, 12, pw - 16, ch - 24, 10);
+            x.roundRect(px + 8, 12, pw - 16, ch - 24, 10);
             x.fill();
             x.fillStyle = PAL.night;
             x.beginPath();
-            x.roundRect(20, 20, pw - 32, ch - 40, 6);
+            x.roundRect(px + 16, 20, pw - 32, ch - 40, 6);
             x.fill();
             x.textBaseline = 'middle';
             x.fillStyle = PAL.white;
-            x.fillText(text, 32, ch / 2 + 2, pw - 56);
+            const squeeze = Math.min(1, (pw - 64) / textW); // very long names are squashed to fit
+            let tx = (cw - textW * squeeze) / 2;
+            parts.forEach((part) => {
+                x.font = part.font;
+                x.fillText(part.p, tx, ch / 2 + 2, part.w * squeeze);
+                tx += part.w * squeeze;
+            });
         });
         const s = new THREE.Sprite(new THREE.SpriteMaterial({
             map, transparent: true, opacity: 0, depthWrite: false,
         }));
         s.scale.set(w, (w * 112) / 512, 1);
-        s.center.set(0, 0.5);
         scene.add(s);
         return s;
     }
@@ -1103,7 +1123,10 @@ export function playCaptureAnimation(container, {
         }))));
         patch.rotation.x = -Math.PI / 2;
         patch.position.set((x0 + x1) / 2, FLOOR - 0.002, 0);
-        patch.renderOrder = -1; // under the grid lines
+        // The floor layers lie almost on top of each other and don't write depth, so left to sorting
+        // the grid could draw over the tape and badges. Their order is fixed instead: section colour
+        // -1, grid 0, tape 1, badge 2, worker shadows 3, lamp light 5
+        patch.renderOrder = -1;
         stage.add(patch);
 
         // the name, painted on the floor just past the tape and right up against the front of the
@@ -1144,6 +1167,7 @@ export function playCaptureAnimation(container, {
         // lie flat, baseline running across the belt and the tops of the letters pointing back up the line
         label.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
         label.position.set(x0 + TAPE / 2 + 0.3 + lh / 2, FLOOR + 0.003, BELT_W / 2 + 0.25 + lw / 2);
+        label.renderOrder = 2; // over the grid and the tape
         stage.add(label);
     });
 
@@ -1185,6 +1209,7 @@ export function playCaptureAnimation(container, {
         const strip = new THREE.Mesh(new THREE.PlaneGeometry(TAPE, 100), floorTape);
         strip.rotation.x = -Math.PI / 2;
         strip.position.set(x, FLOOR + 0.002, 0);
+        strip.renderOrder = 1; // over the grid
         stage.add(strip);
         [-1, 1].forEach((s) => {
             const side = new THREE.Mesh(new THREE.PlaneGeometry(TAPE, BELT_H), sideTape);
@@ -1334,6 +1359,7 @@ export function playCaptureAnimation(container, {
         const shadow = new THREE.Mesh(shadowGeo, shadowMat);
         shadow.rotation.x = -Math.PI / 2;
         shadow.scale.set(scale, scale, 1);
+        shadow.renderOrder = 3; // over the floor paint
         stage.add(wk.group, shadow);
         if (wk.drawHand) stage.add(wk.drawHand);
         const w = {...wk, ...place, scale, shadow, phase: wn * 1.7};
@@ -1472,6 +1498,30 @@ export function playCaptureAnimation(container, {
     let aspect = 1;
     let frontDist = 10;
     let stageX = 0;
+    let stageY = PY;
+    const captionEl = root.querySelector('.cap-caption');
+    const controlsEl = root.querySelector('.cap-controls');
+
+    // The result card and its name plate sit as one group, centred in the free space: left of the
+    // scores panel (or the whole width when the panel is along the bottom on narrow screens), and
+    // between the caption and the buttons. Measured from the page, so it follows the CSS.
+    function layoutResult() {
+        const w = canvas.clientWidth;
+        const h = canvas.clientHeight;
+        if (!w || !h) return;
+        const box = root.getBoundingClientRect();
+        const rel = (el) => {
+            const r = el.getBoundingClientRect();
+            return {left: r.left - box.left, top: r.top - box.top, bottom: r.bottom - box.top};
+        };
+        const bars = rel(barsEl);
+        const halfH = frontDist * Math.tan(THREE.MathUtils.degToRad(22.5));
+        const side = bars.left > w * 0.45;
+        stageX = side ? (bars.left / w - 1) * halfH * aspect : 0;
+        const free = (rel(captionEl).bottom + (side ? rel(controlsEl).top : bars.top)) / 2;
+        const above = PLATE_GAP + resultLabel.scale.y / 2; // how far the plate reaches above the card
+        stageY = (1 - (free / h) * 2) * halfH - above / 2;
+    }
 
     function resize() {
         const w = canvas.clientWidth;
@@ -1484,8 +1534,7 @@ export function playCaptureAnimation(container, {
         aspect = w / h;
         camera.aspect = aspect;
         frontDist = Math.max(10, 3.6 / (0.4142 * aspect)); // keeps the bigger photo on narrow screens
-        // eslint-disable-next-line no-nested-ternary
-        stageX = aspect > 1.3 ? -2.2 : aspect > 0.9 ? -1.3 : 0;
+        layoutResult();
     }
 
     const resizeObserver = new ResizeObserver(resize);
@@ -1779,8 +1828,8 @@ export function playCaptureAnimation(container, {
         }
 
         // the normalised image rises up from the belt below and settles on the left
-        cardEnd.set(stageX, PY, 0.1);
-        cardFrom.set(stageX, PY - 6, 0.1);
+        cardEnd.set(stageX, stageY, 0.1);
+        cardFrom.set(stageX, stageY - 6, 0.1);
         const out = seg(t, RESULT[0], RESULT[1]);
         cardMat.opacity = seg(t, RESULT[0], RESULT[0] + 0.375 * T.resultRise);
         card.visible = cardMat.opacity > 0.001;
@@ -1793,7 +1842,7 @@ export function playCaptureAnimation(container, {
         cardBox.position.set(cardEnd.x, cardEnd.y, cardEnd.z + 0.02);
         resultLabel.material.opacity = seg(t, RESULT[1] + 0.33 * T.resultLabels, RESULT[1] + T.resultLabels);
         resultLabel.visible = resultLabel.material.opacity > 0.001;
-        resultLabel.position.set(cardEnd.x - cardW / 2 - 0.05, cardEnd.y + cardH / 2 + 0.48, cardEnd.z + 0.05);
+        resultLabel.position.set(cardEnd.x, cardEnd.y + cardH / 2 + PLATE_GAP, cardEnd.z + 0.05);
 
         // bars
         barsEl.style.opacity = seg(t, SCORES_T, BARS[0]);
@@ -1814,6 +1863,7 @@ export function playCaptureAnimation(container, {
             titleEl.textContent = `${s + 1}. ${STEPS[s][1]}`;
             textEl.textContent = STEPS[s][2];
             [...stepsEl.children].forEach((e, i) => e.classList.toggle('on', i <= s));
+            layoutResult(); // the caption's height changes with its text
         }
         if (sceneTarget) {
             renderer.setRenderTarget(sceneTarget);

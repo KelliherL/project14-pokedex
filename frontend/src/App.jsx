@@ -229,9 +229,9 @@ function Pokedex(props) {
 
       <div className="foot">
         <div className="grille"><i/><i/><i/></div>
-        <span className="slot"/>
-        <button type="button" className="slot blue" onClick={onBack} aria-label="Back"/>
-        <button type="button" className="big" onClick={onScan} aria-label="Scan"/>
+        <span className="slot" data-label="Select"/>
+        <button type="button" className="slot blue" onClick={onBack} aria-label="Back" data-label="History"/>
+        <button type="button" className="big" onClick={onScan} aria-label="Scan" data-label="Capture"/>
       </div>
 
     </div>
