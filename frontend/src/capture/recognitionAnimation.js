@@ -684,11 +684,10 @@ function makeStrokes(pixels, NX, NY, SHW, SHH, partCounts) {
 * normalised: canvas/image shown at the end (the /normalised crop)
 * quad:       normalised detection quad from the ws, optional
 * scores:     top5 from the ws, [{name, confidence}], optional
-* info:       dex entry, or a promise of one, shown under "Show data" at the end
 * onClose:    called when the user closes the overlay
 * */
 export function playCaptureAnimation(container, {
-    frame, normalised, quad = null, scores = [], dexId = null, info = null, onClose,
+    frame, normalised, quad = null, scores = [], onClose,
 }) {
     // the animation was written against three r128, which had no colour management
     THREE.ColorManagement.enabled = false;
@@ -707,10 +706,8 @@ export function playCaptureAnimation(container, {
         <div class="cap-controls">
             <button type="button" data-act="replay">Replay</button>
             <button type="button" data-act="skip">Skip animation</button>
-            <button type="button" data-act="info" style="visibility:hidden">Show data</button>
             <button type="button" data-act="close">Close</button>
         </div>
-        <pre class="cap-info" hidden></pre>
         ${DEBUG ? '<div class="cap-debug"></div>' : ''}
         ${DEBUG && PALETTE_LOCK ? `<label class="cap-dither">dither
             <input type="range" min="0" max="0.4" step="0.01" value="${DITHER}"><output></output></label>` : ''}`;
@@ -1896,18 +1893,6 @@ export function playCaptureAnimation(container, {
         playing = true;
     };
     root.querySelector('[data-act="close"]').onclick = () => onClose?.();
-    const infoBtn = root.querySelector('[data-act="info"]');
-    const infoEl = root.querySelector('.cap-info');
-    // info can still be on its way (a promise) when the animation starts
-    let disposed = false;
-    infoEl.textContent = 'Loading dex data…';
-    Promise.resolve(info).then((data) => {
-        if (disposed) return;
-        infoEl.textContent = data ? JSON.stringify(data, null, 2) : `No dex data for dexId ${dexId}`;
-    });
-    infoBtn.onclick = () => {
-        infoEl.hidden = !infoEl.hidden;
-    };
     const onKey = (e) => {
         if (e.key === 'Escape') onClose?.();
         if (!DEBUG) return;
@@ -1936,7 +1921,6 @@ export function playCaptureAnimation(container, {
             }
         }
         skipBtn.style.visibility = playing ? 'visible' : 'hidden';
-        infoBtn.style.visibility = t >= END ? 'visible' : 'hidden';
         render(t);
         if (debugEl) {
             const frameNo = Math.round(t * DEBUG_FPS);
@@ -1948,7 +1932,6 @@ export function playCaptureAnimation(container, {
     frameId = requestAnimationFrame(loop);
 
     return function dispose() {
-        disposed = true;
         cancelAnimationFrame(frameId);
         resizeObserver.disconnect();
         window.removeEventListener('keydown', onKey);

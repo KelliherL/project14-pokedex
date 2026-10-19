@@ -13,7 +13,7 @@ const RECONNECT_DELAY_MS = 1000;
 // Settings
 // Controls lights of the UI and explanation text (probably needs updating)
 const LOCKED_SIGMA = 4;
-const UNSURE_BELOW = 0.5;
+const UNSURE_BELOW = 0.4;
 // Alternate idle screen
 const SHOW_PANEL_WHEN_IDLE = true;   
 // How often to refresh the rectified view while a card is detected
@@ -84,15 +84,10 @@ function FrozenRectified({source}) {
 // Confidence panel
 // Shows the rectified card, the top 5 matches, and a confidence bar for each
 function ConfidencePanel({detection, rectified, className = ''}) {
-  const sigma = detection?.sigma ?? 0;
-  const percent = Math.min(100, Math.max(0, (sigma / 6) * 100));
   const topFive = detection?.top5 ?? [];
 
   return (<div className={`card ${className}`}>
-    <h2>Confidence</h2>
-    <div className="track sigma">
-      <div className="fill" style={{width: `${percent}%`, background: 'var(--accent)'}}/>
-    </div>
+    <h2>My guess</h2>
 
     <div className="conf-body">
       {rectified}
@@ -143,15 +138,43 @@ function CameraView({detection, camImgRef}) {
   </div>);
 }
 
+// The database lost its accented and curly characters on import: they're stored as the "unknown
+// character" symbol (�), so the right letter can't be recovered here. Patch the ones seen so
+// far (the é in Pokémon, and apostrophes) until the data is re-imported with the right encoding
+const fixText = (s) => s?.replace(/Pok�mon/g, 'Pokémon').replace(/�/g, '\'');
+
+// one labelled row of the dex entry, like the rows on a trainer card
+function Line({label, className = '', children}) {
+  return (<div className={`line ${className}`}>
+    <span className="label">{label}</span>
+    <span className="value">{children}</span>
+  </div>);
+}
+
 // Result screen
 function ResultView({outcome, onBack}) {
-  const {info, dexId, scores, sigma, normalised} = outcome;
-  const name = info?.name ?? scores[0]?.name ?? 'Unknown';
+  const {dexId, scores} = outcome;
 
-  // Speak button function
-  const speak = () => {
+  // dex entry for the Pokémon the backend locked onto, looked up from the database here
+  const [info, setInfo] = useState(null);
+  useEffect(() => {
+    if (dexId == null) return undefined;
+    let current = true; // ignore a late answer if the result has moved on
+    getPokemonInfo(DEX_INFO_URL, dexId).then((data) => {
+      if (current) setInfo(data);
+    });
+    return () => {
+      current = false;
+    };
+  }, [dexId]);
 
-  };
+  // field names as the database sends them (enName, typings, classification, ...)
+  const name = fixText(info?.enName) ?? scores[0]?.name ?? 'Unknown';
+  // typings come lowercase ("electric"); TYPE_COLORS and the pills use "Electric"
+  const types = (info?.typings ?? []).map((t) => t.charAt(0).toUpperCase() + t.slice(1));
+  const num = (v, unit) => (v == null ? '?' : `${+Number(v).toFixed(1)} ${unit}`); // 0.30000001 -> 0.3
+  const genderless = info && !info.percentMale && !info.percentFemale;
+  const description = fixText(info?.description?.replace(/^"|"$/g, '')); // stored with quotes around it
 
   return (<div className="view result">
 
@@ -159,29 +182,44 @@ function ResultView({outcome, onBack}) {
       {dexId != null && <img src={ART_URL(dexId)} alt={name}/>}
     </div>
 
-    <div className="card">
-      <h1>{name}</h1>
-      <p className="small">{info?.genus}</p>
+    <div className="card entry">
+      {/* name, type and classification, then generation and size */}
+      <section className="lines">
+        <Line label="Name">{name}</Line>
+        <Line label="Type" className="types">
+          {types.map((t) => (
+            <span key={t} className="pill" style={{background: TYPE_COLORS[t]}}>{t}</span>
+          ))}
+        </Line>
+        <Line label="Class">{fixText(info?.classification)}</Line>
+        <Line label="Generation">{info?.generation}</Line>
+        <Line label="Height">{num(info?.heightM, 'm')}</Line>
+        <Line label="Weight">{num(info?.weightKG, 'kg')}</Line>
+      </section>
 
-      <div className="pills">
-        {(info?.types ?? []).map((t) => (
-          <span key={t} className="pill" style={{background: TYPE_COLORS[t]}}>{t}</span>
-        ))}
-      </div>
+      {/* base stats two to a row, then gender split and description */}
+      <section>
+        <div className="lines stats">
+          <Line label="HP">{info?.hp}</Line>
+          <Line label="Speed">{info?.speed}</Line>
+          <Line label="Attack">{info?.attack}</Line>
+          <Line label="Sp. Atk">{info?.spAttack}</Line>
+          <Line label="Defense">{info?.defense}</Line>
+          <Line label="Sp. Def">{info?.spDefense}</Line>
+        </div>
 
-      <p>{info?.flavor}</p>
+        <div className="lines">
+          <Line label="Male/Female">
+            {genderless ? 'Genderless' : `${info?.percentMale ?? '?'} / ${info?.percentFemale ?? '?'} %`}
+          </Line>
+          <Line label="Description" className="tall">{description}</Line>
+        </div>
+      </section>
 
       <div className="buttons">
-        <button type="button" className="btn" onClick={speak}>Hear it</button>
         <button type="button" className="btn" onClick={onBack}>Scan again</button>
       </div>
     </div>
-
-    <ConfidencePanel
-      className="wide"
-      detection={{sigma, top5: scores}}
-      rectified={<FrozenRectified source={normalised}/>}
-    />
 
   </div>);
 }
@@ -293,7 +331,7 @@ function Pokedex(props) {
 
       <div className="foot">
         <div className="grille"><i/><i/><i/></div>
-        <span className="slot" data-label="Select"/>
+        <span className="slot" data-label="FAQ"/>
         <button type="button" className="slot blue" onClick={onBack} disabled={busy} aria-label="Back" data-label="History"/>
         <button type="button" className="big" onClick={onScan} disabled={busy} aria-label="Scan" data-label="Capture"/>
       </div>
@@ -400,13 +438,11 @@ async function capturePokemon(imageRef, detection) {
   // Fallback: if there is no normalised image (no lock yet / request failed), use the captured frame
   const normalised = await normalisedRequest;
 
-  // dex entry for whatever the backend locked onto. Not awaited: the database can be slow, and the
-  // animation only needs it at the very end
+  // whatever the backend locked onto; the result screen looks its dex entry up from this
   const dexId = normalised?.dexId ?? detection?.dexId ?? null;
-  const info = dexId != null ? getPokemonInfo(DEX_INFO_URL, dexId) : null;
 
   return {
-    dexId, info, frame, normalised: normalised?.image ?? frame, quad: detection?.quad ?? null,
+    dexId, frame, normalised: normalised?.image ?? frame, quad: detection?.quad ?? null,
     scores: detection?.top5 ?? [],
     sigma: detection?.sigma ?? 0,
   };
@@ -434,9 +470,7 @@ function App() {
   return (<div className="relative">
     <Pokedex
       animation={<CaptureAnimation capture={capture} onClose={() => {
-        // info is still a promise: show the result now and fill the info in when it arrives
-        setOutcome({...capture, info: null});
-        Promise.resolve(capture.info).then((info) => setOutcome((o) => (o?.frame === capture.frame ? {...o, info} : o)));
+        setOutcome(capture);
         setCapture(null);
         setTimeout(() => setBusy(false), ZOOM_SECONDS * 1000); // once the zoom back out is done
       }}/>}

@@ -23,7 +23,8 @@
   display: grid;
   place-items: center;
   padding: 2vmin;
-  background: var(--page);
+  background-image: url("./background.jpg");
+  background-position: top;
   font-family: var(--font-body);
 }
 
@@ -280,9 +281,93 @@
 .view.solo { grid-template-columns: 1fr; }
 
 .result {
-  grid-template-columns: 34% 1fr;
-  grid-template-rows: 1fr auto;
+  grid-template-columns: 30% 1fr;
+  grid-template-rows: 1fr;
 }
+
+/* the dex entry beside the artwork: facts on the left, stats and description on the right.
+   Laid out like a trainer card: each field is a row with a label slab, and the rows alternate
+   colour so they're easy to tell apart */
+.entry {
+  --row-a: #efe5bb; /* darker cream */
+  --row-b: #fbf7e6; /* lighter cream */
+  --slab: #c5ccc0;  /* the label cells */
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 1.2cqw 2cqw;
+  align-content: start;
+}
+
+.entry section {
+  display: grid;
+  gap: 1cqw;
+  align-content: start;
+}
+
+.entry .buttons { grid-column: 1 / -1; }
+
+/* a block of rows. The block owns the columns and every row uses them (subgrid), so the label
+   column is as wide as that block's longest label and the values all line up */
+.lines {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  overflow: hidden;
+  border: .2cqw solid var(--ink);
+  border-radius: .8cqw;
+}
+
+.line {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  min-height: 2.9cqw;
+  background: var(--row-b);
+}
+
+.lines > .line:nth-child(odd) { background: var(--row-a); }
+
+.line .label {
+  display: flex;
+  align-items: center;
+  padding: 0 1cqw;
+  white-space: nowrap;
+  background: var(--slab);
+  border-right: .2cqw solid #0002;
+  font: max(8px, 1cqw) var(--font-head);
+}
+
+.line .value {
+  align-self: center;
+  min-width: 0;
+  padding: .4cqw 1cqw;
+  font-size: max(14px, 2cqw);
+  line-height: 1.05;
+}
+
+/* the stats sit two to a row (label, value, label, value), so stripe by pairs */
+.lines.stats { grid-template-columns: max-content 1fr max-content 1fr; }
+.lines.stats > .line { grid-column: span 2; background: var(--row-b); }
+.lines.stats > .line:nth-child(4n+1),
+.lines.stats > .line:nth-child(4n+2) { background: var(--row-a); }
+
+/* the type pills in their row: smaller than elsewhere so two fit side by side */
+.line.types .value {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6cqw;
+}
+
+.line.types .pill {
+  padding: .3cqw 1cqw;
+  font-size: max(8px, .95cqw);
+}
+
+/* the description runs under its label, across the whole row */
+.line.tall {
+  grid-template-columns: 1fr;
+}
+
+.line.tall .label { padding: .5cqw 1cqw; border-right: 0; }
 
 .card {
   min-height: 0;

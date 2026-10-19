@@ -24,7 +24,7 @@ polish work without re-reading the history.
 | `frontend/src/capture/recognitionAnimation.js` | Everything: timeline, three.js scene, belt, workers, camera, DOM overlay. ~1,600 lines. |
 | `frontend/src/capture/recognitionAnimation.css` | Overlay styles (`.cap-*`), including the `.cap-debug` frame counter. |
 | `frontend/src/capture/CaptureAnimation.jsx` | React wrapper; mounts `playCaptureAnimation` when `capture` is set. |
-| `frontend/src/App.jsx` → `capturePokemon()` | Grabs the stream frame, **awaits** `/normalised`, starts the animation; the dex info (`/Pokemon/{id}`, MongoDB) is passed as a **promise** so a slow DB doesn't delay the start. |
+| `frontend/src/App.jsx` → `capturePokemon()` | Grabs the stream frame, **awaits** `/normalised`, starts the animation. The animation doesn't use the dex info; `ResultView` looks it up (`/Pokemon/{id}`, MongoDB) from `outcome.dexId` once the animation closes. |
 
 ## Debugging workflow (how the user gives feedback)
 
@@ -141,7 +141,8 @@ What the retheme did, all as restyles of parts that already existed:
   is dimmed; the tape up the belt sides stays full yellow on purpose.
 - Speech bubble is a game dialog box (white, black/blue/black border, grey text with a shadow).
 - Overlay (CSS): GBA menu panels with title bars, step progress as blocks, scores as HP bars,
-  pill buttons after the type badges, "Show data" on a dark green handheld screen. Result name is
+  pill buttons after the type badges (the "Show data" button was removed on 19 Oct 2026: the
+  dex info now shows on the Pokédex result screen after closing). Result name is
   on a name plate sprite (the old plain text was unreadable once pixelated).
 - Fonts: Silkscreen for headings, labels, buttons and in-scene text; Atkinson Hyperlegible for
   body text and numbers. Pixelify Sans was tried and dropped: at caption size "C" read as "O",
