@@ -13,7 +13,10 @@ polish work without re-reading the history.
 - Accuracy points we've kept on purpose:
   - Early layers don't guess. Only the last ("parts") station is tied to the top guesses; edges,
     curves and shapes stations use pattern colours.
-  - A caption notes "we named the stations; the model has no names for them".
+  - Captions (rewritten 19 Oct 2026 with the user) say the workers *learned* their patterns in
+    training rather than comparing with stored photos, and that each station only sees the marks
+    of the one before. The old "we named the stations; the model has no names for them" line was
+    dropped in that rewrite.
 - Scores shown come from the live WebSocket `top5` at the moment of capture (empty if the card
   isn't detected in that frame and nothing is locked). The user is fine with that.
 
@@ -61,8 +64,9 @@ Top of file, in order:
    previous one ends via `span(start, len)`, so changing one value shifts everything after it.
    Derived phase constants (`CAM_IN`, `SHUTTER`, `EJECT`, `CAM_FADE`, `FLIP`, `CROP`, `CHAN_T`,
    `SPLIT`, `NORM`, `MERGE`, `DROP`/`LAND`, `STOPS[]`, `DESK_T`, `VOTE_CAM`, `COUNT`, `VOTE_END`,
-   `RETURN`, `SCORES_T`, `BARS`, `RESULT`, `END`) are what the render code uses. `STEPS` holds the
-   caption text per step.
+   `RETURN`, `SCORES_T`, `BARS`, `RESULT`, `END`) are what the render code uses. `CAPTIONS` holds the
+   running captions (start time, text, position, optional heading); `BOX_STEPS` holds the text
+   for the box in the top corner, which only shows for the scores and the result.
 2. **Look** (see "Visual theme" below for the rules behind it):
    - `PAL`: the 32-colour palette (DawnBringer 32), by name. Every colour comes from here.
    - `ADJUSTED`: the only colours added on top of `PAL`, with the user's permission: darkened

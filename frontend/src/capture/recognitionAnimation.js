@@ -113,17 +113,31 @@ const END = Math.max(RESULT[1] + T.resultLabels, BARS[1]) + T.resultHold;
 // out, camera fades), and back out over the same time when the animation is closed
 export const ZOOM_SECONDS = CAM_FADE[1];
 
-const STEPS = [
-    [0, 'Capture', 'The camera grabs a single frame.'],
-    [CROP[0], 'Locate and crop', 'A detector finds the Pokémon and crops to it. This box does not come from the classifier.'],
-    [CHAN_T, 'Split into channels', 'Every pixel is three numbers from 0 to 255. OpenCV stores them as blue, green, red. Taller means brighter.'],
-    [NORM[0], 'Resize and normalize', "Shrink to the model's input size and scale 0–255 down to 0.0–1.0. Still an ordered grid, nothing is scrambled."],
-    [MERGE[0], 'The model', 'The picture rides past workers who each spot one small pattern and mark it wherever it appears. Nobody programmed them: they learned by practising on thousands of labelled photos.'],
-    [STOPS[1].arrive, 'Building on the marks', 'Each station only sees the marks made before it. Edges join into curves, curves into shapes. We named the stations; the model has no names for them.'],
-    [STOPS[3].arrive, 'Parts point to answers', 'At the last station each worker stands for one possible answer and marks the parts that point to it. The more they find, the higher that answer scores.'],
-    [DESK_T, 'The vote', 'The marks are counted up as votes for each Pokémon.'],
-    [SCORES_T, 'Scores', 'The last layer gives one score per Pokémon. The highest wins.'],
-    [RESULT[0], 'Result', 'Out comes the normalised image the classifier worked on, with the name it gave.'],
+// What the animation says, and when: each caption shows from `at` until the next one starts,
+// fading in and out over CAPTION_FADE seconds. `pos` is where it sits: 'below' (centred low, the
+// default) or 'left' (beside the channel planes). `head` is an optional bigger first line.
+// From the scores on, the box in the top corner takes over (BOX_STEPS)
+const CAPTIONS = [
+    {at: 0, text: 'Taking photo…'},
+    {at: FLIP[1], text: 'Looks good!'},
+    {at: CROP[0], head: 'Cropping.', text: "An earlier part of the program finds the card's outline and cuts it out."},
+    {at: CHAN_T, text: 'Splitting color channels'},
+    {at: SPLIT[0], pos: 'left', text: 'The image is split by red, green and blue values from 0 to 255. Taller dots are brighter.'},
+    {at: NORM[0], pos: 'left', text: 'The picture is shrunk to the size the model expects, and the numbers go from 0–255 to 0–1.'},
+    {at: DROP[0], text: "Transferring to 'inside' the model"},
+    {at: LAND, text: 'Inside the model'},
+    {at: STOPS[0].arrive, text: 'Each worker learned one tiny pattern in training. These ones mark straight edges wherever they find them.'},
+    {at: STOPS[1].arrive, text: 'The next workers only see the edge marks, and join them into curves.'},
+    {at: STOPS[2].arrive, text: 'Nobody told the workers what to look for. They learned it from labelled photos.'},
+    {at: STOPS[3].arrive, text: 'The last workers each stand for one Pokémon, and mark the parts that point to it.'},
+    {at: DESK_T, text: 'The marks are counted up as votes for each Pokémon.'},
+    {at: SCORES_T, text: null}, // hands over to the box
+];
+const CAPTION_FADE = 0.3;
+// the scores and the result keep the box in the top corner, with their wording unchanged
+const BOX_STEPS = [
+    [SCORES_T, 'The last layer gives one score per Pokémon. The highest wins.'],
+    [RESULT[0], 'Out comes the normalised image the classifier worked on, with the name it gave.'],
 ];
 const MAX_SCORE_ROWS = 4;
 
@@ -701,7 +715,8 @@ export function playCaptureAnimation(container, {
     root.innerHTML = `
         <canvas></canvas>
         <div class="cap-flash"></div>
-        <div class="cap-caption"><h1></h1><p></p><div class="cap-steps"></div></div>
+        <div class="cap-say"><strong></strong><span></span></div>
+        <div class="cap-caption"><p></p></div>
         <div class="cap-bars"><h2>Classifier scores</h2><div class="cap-rows"></div></div>
         <div class="cap-controls">
             <button type="button" data-act="replay">Replay</button>
@@ -714,13 +729,14 @@ export function playCaptureAnimation(container, {
     container.appendChild(root);
     const debugEl = root.querySelector('.cap-debug');
     const flashEl = root.querySelector('.cap-flash');
-    const titleEl = root.querySelector('.cap-caption h1');
-    const textEl = root.querySelector('.cap-caption p');
-    const stepsEl = root.querySelector('.cap-steps');
+    const sayEl = root.querySelector('.cap-say');
+    const sayHead = sayEl.querySelector('strong');
+    const sayText = sayEl.querySelector('span');
+    const boxText = root.querySelector('.cap-caption p');
+    boxText.textContent = BOX_STEPS[0][1]; // so the box has its real size when the result is laid out
     const barsEl = root.querySelector('.cap-bars');
     const rowsEl = root.querySelector('.cap-rows');
     const skipBtn = root.querySelector('[data-act="skip"]');
-    STEPS.forEach(() => stepsEl.appendChild(document.createElement('span')));
 
     // names come from the backend, so build rows with textContent rather than innerHTML
     const fills = top.map(({name}, i) => {
@@ -1855,17 +1871,27 @@ export function playCaptureAnimation(container, {
             fills[i][1].textContent = `${Math.round(v)}%`;
         });
 
-        // caption
+        // caption for this moment, fading in after it starts and out before the next one
         let s = 0;
-        STEPS.forEach((st, i) => {
-            if (t >= st[0]) s = i;
+        CAPTIONS.forEach((cap, i) => {
+            if (t >= cap.at) s = i;
         });
+        const cap = CAPTIONS[s];
         if (s !== lastStep) {
             lastStep = s;
-            titleEl.textContent = `${s + 1}. ${STEPS[s][1]}`;
-            textEl.textContent = STEPS[s][2];
-            [...stepsEl.children].forEach((e, i) => e.classList.toggle('on', i <= s));
-            layoutResult(); // the caption's height changes with its text
+            sayEl.className = `cap-say ${cap.pos ?? 'below'}`;
+            sayHead.textContent = cap.head ?? '';
+            sayText.textContent = cap.text ?? '';
+        }
+        const nextAt = CAPTIONS[s + 1]?.at ?? Infinity;
+        sayEl.style.opacity = cap.text ? clamp((t - cap.at) / CAPTION_FADE) * clamp((nextAt - t) / CAPTION_FADE) : 0;
+
+        // the box in the top corner, from the scores on
+        const boxStep = BOX_STEPS.filter(([at]) => t >= at).pop();
+        captionEl.style.visibility = boxStep ? 'visible' : 'hidden';
+        if (boxStep && boxText.textContent !== boxStep[1]) {
+            boxText.textContent = boxStep[1];
+            layoutResult(); // the box's height changes with its text
         }
         if (sceneTarget) {
             renderer.setRenderTarget(sceneTarget);
