@@ -16,8 +16,7 @@ export default function CaptureAnimation({capture, onClose}) {
     useEffect(() => {
         if (!capture || !containerRef.current) return undefined;
         return playCaptureAnimation(containerRef.current, {
-            ...capture,
-            onClose: () => onCloseRef.current?.(),
+            ...capture, onClose: () => onCloseRef.current?.(),
         });
     }, [capture]);
 

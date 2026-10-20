@@ -25,8 +25,9 @@ except Exception as e:
 def pokemonbyid(id: int):
     try:
         collection = database.get_collection("TestingDatabase")
-        pokemon = collection.find_one({"_id": id})
-        return json.dumps(pokemon)
+        # the document itself (None if there's no such id); FastAPI turns it into JSON. Returning
+        # json.dumps(...) here made the endpoint send a JSON string inside JSON
+        return collection.find_one({"_id": id})
     except Exception as e:
         print(e)
         return 0
@@ -65,11 +66,11 @@ def create_app(worker: CaptureWorker) -> FastAPI:
     @app.get("/Pokemon/{pokemon_id}")
     def read_root(pokemon_id: int):
         pokemon = pokemonbyid(pokemon_id)
-        if pokemon_id is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="The requested item could not be found.")
-        elif pokemon_id == 0:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="The server failed to execute the request.")
+        # check the lookup's result, not the id from the url
+        if pokemon is None:
+            raise HTTPException(status_code=404, detail="The requested item could not be found.")
+        elif pokemon == 0:
+            raise HTTPException(status_code=500, detail="The server failed to execute the request.")
         else:
             return pokemon
 

@@ -1,6 +1,7 @@
 import './App.css';
-import {useEffect, useRef, useState} from 'react';
+import {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import CaptureAnimation from './capture/CaptureAnimation.jsx';
+import {ZOOM_SECONDS} from './capture/recognitionAnimation';
 import {fetchNormalised, getPokemonInfo, grabFrame} from './capture/captureFrame';
 
 const STREAM_URL = 'http://localhost:8000/stream';
@@ -12,11 +13,15 @@ const RECONNECT_DELAY_MS = 1000;
 // Settings
 // Controls lights of the UI and explanation text (probably needs updating)
 const LOCKED_SIGMA = 4;
-const UNSURE_BELOW = 0.5;
+const UNSURE_BELOW = 0.4;
 // Alternate idle screen
 const SHOW_PANEL_WHEN_IDLE = true;   
 // How often to refresh the rectified view while a card is detected
 const RECTIFIED_REFRESH_MS = 1000;
+// The capture animation is laid out at this width (and 16:9 height), then scaled to fit its box on
+// the screen, so its text and panels keep the proportions they have full screen. Smaller = bigger
+// text and panels in the animation
+const ANIM_LAYOUT_WIDTH = 1280;
 
 // Wording for the small explanation line under the bars
 const explain = (d) => {
@@ -79,15 +84,10 @@ function FrozenRectified({source}) {
 // Confidence panel
 // Shows the rectified card, the top 5 matches, and a confidence bar for each
 function ConfidencePanel({detection, rectified, className = ''}) {
-  const sigma = detection?.sigma ?? 0;
-  const percent = Math.min(100, Math.max(0, (sigma / 6) * 100));
   const topFive = detection?.top5 ?? [];
 
   return (<div className={`card ${className}`}>
-    <h2>Confidence</h2>
-    <div className="track sigma">
-      <div className="fill" style={{width: `${percent}%`, background: 'var(--accent)'}}/>
-    </div>
+    <h2>My guess</h2>
 
     <div className="conf-body">
       {rectified}
@@ -138,15 +138,43 @@ function CameraView({detection, camImgRef}) {
   </div>);
 }
 
+// The database lost its accented and curly characters on import: they're stored as the "unknown
+// character" symbol (�), so the right letter can't be recovered here. Patch the ones seen so
+// far (the é in Pokémon, and apostrophes) until the data is re-imported with the right encoding
+const fixText = (s) => s?.replace(/Pok�mon/g, 'Pokémon').replace(/�/g, '\'');
+
+// one labelled row of the dex entry, like the rows on a trainer card
+function Line({label, className = '', children}) {
+  return (<div className={`line ${className}`}>
+    <span className="label">{label}</span>
+    <span className="value">{children}</span>
+  </div>);
+}
+
 // Result screen
 function ResultView({outcome, onBack}) {
-  const {info, dexId, scores, sigma, normalised} = outcome;
-  const name = info?.name ?? scores[0]?.name ?? 'Unknown';
+  const {dexId, scores} = outcome;
 
-  // Speak button function
-  const speak = () => {
+  // dex entry for the Pokémon the backend locked onto, looked up from the database here
+  const [info, setInfo] = useState(null);
+  useEffect(() => {
+    if (dexId == null) return undefined;
+    let current = true; // ignore a late answer if the result has moved on
+    getPokemonInfo(DEX_INFO_URL, dexId).then((data) => {
+      if (current) setInfo(data);
+    });
+    return () => {
+      current = false;
+    };
+  }, [dexId]);
 
-  };
+  // field names as the database sends them (enName, typings, classification, ...)
+  const name = fixText(info?.enName) ?? scores[0]?.name ?? 'Unknown';
+  // typings come lowercase ("electric"); TYPE_COLORS and the pills use "Electric"
+  const types = (info?.typings ?? []).map((t) => t.charAt(0).toUpperCase() + t.slice(1));
+  const num = (v, unit) => (v == null ? '?' : `${+Number(v).toFixed(1)} ${unit}`); // 0.30000001 -> 0.3
+  const genderless = info && !info.percentMale && !info.percentFemale;
+  const description = fixText(info?.description?.replace(/^"|"$/g, '')); // stored with quotes around it
 
   return (<div className="view result">
 
@@ -154,29 +182,44 @@ function ResultView({outcome, onBack}) {
       {dexId != null && <img src={ART_URL(dexId)} alt={name}/>}
     </div>
 
-    <div className="card">
-      <h1>{name}</h1>
-      <p className="small">{info?.genus}</p>
+    <div className="card entry">
+      {/* name, type and classification, then generation and size */}
+      <section className="lines">
+        <Line label="Name">{name}</Line>
+        <Line label="Type" className="types">
+          {types.map((t) => (
+            <span key={t} className="pill" style={{background: TYPE_COLORS[t]}}>{t}</span>
+          ))}
+        </Line>
+        <Line label="Class">{fixText(info?.classification)}</Line>
+        <Line label="Generation">{info?.generation}</Line>
+        <Line label="Height">{num(info?.heightM, 'm')}</Line>
+        <Line label="Weight">{num(info?.weightKG, 'kg')}</Line>
+      </section>
 
-      <div className="pills">
-        {(info?.types ?? []).map((t) => (
-          <span key={t} className="pill" style={{background: TYPE_COLORS[t]}}>{t}</span>
-        ))}
-      </div>
+      {/* base stats two to a row, then gender split and description */}
+      <section>
+        <div className="lines stats">
+          <Line label="HP">{info?.hp}</Line>
+          <Line label="Speed">{info?.speed}</Line>
+          <Line label="Attack">{info?.attack}</Line>
+          <Line label="Sp. Atk">{info?.spAttack}</Line>
+          <Line label="Defense">{info?.defense}</Line>
+          <Line label="Sp. Def">{info?.spDefense}</Line>
+        </div>
 
-      <p>{info?.flavor}</p>
+        <div className="lines">
+          <Line label="Male/Female">
+            {genderless ? 'Genderless' : `${info?.percentMale ?? '?'} / ${info?.percentFemale ?? '?'} %`}
+          </Line>
+          <Line label="Description" className="tall">{description}</Line>
+        </div>
+      </section>
 
       <div className="buttons">
-        <button type="button" className="btn" onClick={speak}>Hear it</button>
         <button type="button" className="btn" onClick={onBack}>Scan again</button>
       </div>
     </div>
-
-    <ConfidencePanel
-      className="wide"
-      detection={{sigma, top5: scores}}
-      rectified={<FrozenRectified source={normalised}/>}
-    />
 
   </div>);
 }
@@ -193,9 +236,61 @@ function UnsureView({onBack}) {
   </div>);
 }
 
+// For the capture animation: finds a 16:9 box centred where the camera feed is (the animation plays
+// in it, the confidence panel stays beside it), and zooms the Pokédex in until that box covers the
+// whole window, then back out. The shell is moved and scaled with a CSS transform, so everything on
+// the screen, scanlines included, scales together. Page measurements are divided by the current
+// zoom, so it can all be redone on a window resize while zoomed in.
+function useScreenZoom(zoomed, shellRef, screenRef) {
+  const [transform, setTransform] = useState('none');
+  const [slot, setSlot] = useState(null); // where the animation goes, in the screen's layout pixels
+
+  useLayoutEffect(() => {
+    if (!zoomed) {
+      setTransform('none');
+      return undefined;
+    }
+    const fit = () => {
+      const shell = shellRef.current;
+      const screen = screenRef.current;
+      if (!shell || !screen) return;
+      const sr = screen.getBoundingClientRect();
+      const z = sr.width / screen.offsetWidth || 1;
+      // the camera feed's inside, or the whole screen if the feed isn't showing
+      const feed = screen.querySelector('.feed') ?? screen;
+      const fr = feed.getBoundingClientRect();
+      const inner = feed === screen ? 0 : 1;
+      const fx = (fr.left - sr.left) / z - screen.clientLeft + inner * feed.clientLeft;
+      const fy = (fr.top - sr.top) / z - screen.clientTop + inner * feed.clientTop;
+      const w = Math.min(feed.clientWidth, (feed.clientHeight * 16) / 9);
+      const h = (w * 9) / 16;
+      const box = {left: fx + (feed.clientWidth - w) / 2, top: fy + (feed.clientHeight - h) / 2, width: w, height: h};
+      setSlot(box);
+
+      const parent = shell.offsetParent?.getBoundingClientRect() ?? {left: 0, top: 0};
+      // multiplied the height and width by 1.1x here to make the viewport a little bigger
+      const scale = Math.max(window.innerWidth / (w*1.1), window.innerHeight / (h*1.1));
+      // middle of the box, from the shell's top left corner (the transform's origin)
+      const cx = shell.clientLeft + screen.offsetLeft + screen.clientLeft + box.left + w / 2;
+      const cy = shell.clientTop + screen.offsetTop + screen.clientTop + box.top + h / 2;
+      const tx = window.innerWidth / 2 - (parent.left + shell.offsetLeft) - scale * cx;
+      const ty = window.innerHeight / 2 - (parent.top + shell.offsetTop) - scale * cy;
+      setTransform(`translate(${tx}px, ${ty}px) scale(${scale})`);
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [zoomed, shellRef, screenRef]);
+
+  return {transform, slot};
+}
+
 // Pokedex body and screen picker
 function Pokedex(props) {
-  const {camImgRef, onScan, onBack, detection, outcome} = props;
+  const {camImgRef, onScan, onBack, detection, outcome, zoomed, busy} = props;
+  const shellRef = useRef(null);
+  const screenRef = useRef(null);
+  const {transform, slot} = useScreenZoom(zoomed, shellRef, screenRef);
 
   const unsure = outcome && (outcome.dexId == null || (outcome.scores[0]?.confidence ?? 0) < UNSURE_BELOW);
 
@@ -204,8 +299,8 @@ function Pokedex(props) {
   if (outcome) status = unsure ? 'scanning' : 'locked';
   else if (detection) status = (detection.sigma ?? 0) >= LOCKED_SIGMA ? 'locked' : 'scanning';
 
-  return (<div className="dex">
-    <div className="shell">
+  return (<div className={`dex ${busy ? 'zooming' : ''}`} style={{'--zoom-time': `${ZOOM_SECONDS}s`}}>
+    <div className="shell" ref={shellRef} style={{transform}}>
 
       <div className="top">
         <div className="lens" data-on={status !== 'idle'}/>
@@ -217,21 +312,28 @@ function Pokedex(props) {
       </div>
 
       <div className="bezel">
-        <div className="screen">
-          {/* Choose the screen to display */}
-          {!outcome && <CameraView detection={detection} camImgRef={camImgRef}/>}
-          {outcome && unsure && <UnsureView onBack={onBack}/>}
-          {outcome && !unsure && <ResultView outcome={outcome} onBack={onBack}/>}
-          {props.animation}
+        <div className="screen" ref={screenRef}>
+          {/* Choose the screen to display; nothing on it reacts while a capture is playing */}
+          <div className="views" inert={busy}>
+            {!outcome && <CameraView detection={detection} camImgRef={camImgRef}/>}
+            {outcome && unsure && <UnsureView onBack={onBack}/>}
+            {outcome && !unsure && <ResultView outcome={outcome} onBack={onBack}/>}
+          </div>
+          {/* the capture animation, over the camera feed; outside .views so its own buttons still work */}
+          <div className="anim-slot" style={slot ? {
+            ...slot,
+            '--anim-w': `${ANIM_LAYOUT_WIDTH}px`,
+            '--anim-fit': slot.width / ANIM_LAYOUT_WIDTH,
+          } : undefined}>{props.animation}</div>
           <div className="crt"/>
         </div>
       </div>
 
       <div className="foot">
         <div className="grille"><i/><i/><i/></div>
-        <span className="slot"/>
-        <button type="button" className="slot blue" onClick={onBack} aria-label="Back"/>
-        <button type="button" className="big" onClick={onScan} aria-label="Scan"/>
+        <span className="slot" data-label="FAQ"/>
+        <button type="button" className="slot blue" onClick={onBack} disabled={busy} aria-label="Back" data-label="History"/>
+        <button type="button" className="big" onClick={onScan} disabled={busy} aria-label="Scan" data-label="Capture"/>
       </div>
 
     </div>
@@ -336,12 +438,11 @@ async function capturePokemon(imageRef, detection) {
   // Fallback: if there is no normalised image (no lock yet / request failed), use the captured frame
   const normalised = await normalisedRequest;
 
-  // dex entry for whatever the backend locked onto, dumped at the end of the animation
+  // whatever the backend locked onto; the result screen looks its dex entry up from this
   const dexId = normalised?.dexId ?? detection?.dexId ?? null;
-  const info = dexId != null ? await getPokemonInfo(DEX_INFO_URL, dexId) : null;
 
   return {
-    dexId, info, frame, normalised: normalised?.image ?? frame, quad: detection?.quad ?? null,
+    dexId, frame, normalised: normalised?.image ?? frame, quad: detection?.quad ?? null,
     scores: detection?.top5 ?? [],
     sigma: detection?.sigma ?? 0,
   };
@@ -352,12 +453,18 @@ function App() {
   const detection = useDetection(WS_URL);
   const [capture, setCapture] = useState(null);
   const [outcome, setOutcome] = useState(null);
+  // from pressing capture until the zoom back out has finished; the Pokédex's buttons are
+  // disabled meanwhile so nothing can interrupt the animation
+  const [busy, setBusy] = useState(false);
 
   const camImgRef = useRef(null);
 
   const handleCapture = async () => {
+    if (busy) return;
+    setBusy(true);
     const result = await capturePokemon(camImgRef, detection);
     if (result) setCapture(result);
+    else setBusy(false);
   };
 
   return (<div className="relative">
@@ -365,7 +472,10 @@ function App() {
       animation={<CaptureAnimation capture={capture} onClose={() => {
         setOutcome(capture);
         setCapture(null);
+        setTimeout(() => setBusy(false), ZOOM_SECONDS * 1000); // once the zoom back out is done
       }}/>}
+      zoomed={capture != null}
+      busy={busy}
       detection={detection}
       camImgRef={camImgRef}
       outcome={outcome}
