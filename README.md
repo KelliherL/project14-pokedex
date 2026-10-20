@@ -111,19 +111,3 @@ than to the abstract.
   a client sign-off item.
 - Verified lock-on is validated on synthetic stress scenes; real-webcam
   validation (spike a′) closes it out.
-
-## Near-term work
-
-1. Client meeting #1 — [the questions](docs/CLIENT-QUESTIONS.md); the three
-   big asks are venue internet, early access to the exact figurines/cards,
-   and privacy/IP sign-off owners.
-2. Spike (a′): the card pipeline on **real cards + our webcam** — the
-   synthetic stress validation is done ([measured
-   baselines](docs/research/2026-08-07-measured-baselines.md)); real
-   glare/sleeve/holo footage closes it out.
-3. Spike (b′): the decided figurine backend (DINOv2-kNN, validated on
-   CORe50) versus its control arms on ~5 real figurines, plus the
-   reference-count ablation and the **unknown-rejection hard gate**.
-4. Spike (c′): the explainability displays live — the CAM budget and sanity
-   gate are already measured and passing; what remains is the assembled
-   30-second show and a legibility pilot.
