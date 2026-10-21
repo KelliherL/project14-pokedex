@@ -7,3 +7,4 @@ data/cards/*
 !data/cards/hashes.json
 /.idea/
 .env
+scripts/net9.0/
