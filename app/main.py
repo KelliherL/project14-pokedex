@@ -12,7 +12,9 @@ the recognition pipeline without a frontend running.
 Run:    python -m app.main                     (server, from the repo root, venv active)
         python -m app.main --dev-window         (cv2 debug window instead)
 Server console keys: space = identify + speak · m = switch card/figurine ·
-                      b = capture the empty-stand background plate (figurine mode) · q = quit
+                      b = capture the empty-stand background plate (figurine mode) ·
+                      c = clear console · r = restart (exit code 3, back to the
+                      launcher menu) · q = quit · x = force shutdown (exit code 9)
 
 See README.md for what is real vs stubbed.
 """
@@ -42,9 +44,15 @@ def main() -> int:
         from app.dev_harness import run
         return run(args.camera, args.mode, args.mute)
 
+    def exit_process(code: int) -> None:
+        # Called from the key-listener thread: release the camera before the
+        # launcher reopens it, then skip uvicorn's graceful shutdown.
+        worker.stop()
+        os._exit(code)
+
     try:
         worker = CaptureWorker(args.camera, mode=args.mode, mute=args.mute,
-                                on_quit=lambda: os._exit(0))
+                                on_exit=exit_process)
     except RuntimeError as exc:
         print(f"error: {exc}")
         return 1

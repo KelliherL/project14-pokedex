@@ -860,31 +860,28 @@ export function playCaptureAnimation(container, {
     const photoMat = new THREE.MeshBasicMaterial({map: textureFrom(frame), transparent: true, clippingPlanes: [slotClip]});
     const photo = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), photoMat);
     photoRig.add(photo);
-    const backMat = new THREE.MeshBasicMaterial({
-        // the back of a trading card: blue, with a Poké Ball in the middle
-        map: canvasTexture(256, Math.round(256 / fa), (x, w, h) => {
-            x.fillStyle = PAL.indigo;
-            x.fillRect(0, 0, w, h);
-            x.fillStyle = PAL.sea;
-            x.fillRect(14, 14, w - 28, h - 28);
-            x.strokeStyle = PAL.royal;
-            x.lineWidth = 4;
-            x.strokeRect(14, 14, w - 28, h - 28);
-            const r = Math.min(w, h) * 0.24;
-            disc(x, w / 2, h / 2, r + 5, INK);
-            disc(x, w / 2, h / 2, r, PAL.white);
-            x.fillStyle = PAL.red;
-            x.beginPath();
-            x.arc(w / 2, h / 2, r, Math.PI, 0);
-            x.fill();
-            x.fillStyle = INK;
-            x.fillRect(w / 2 - r, h / 2 - 4, 2 * r, 8);
-            disc(x, w / 2, h / 2, r * 0.32, INK);
-            disc(x, w / 2, h / 2, r * 0.2, PAL.white);
-        }),
-        transparent: true,
-        clippingPlanes: [slotClip],
+    // the back of a trading card: blue, with the app's own logo (the favicon) in the middle,
+    // sat in the same ink outline as everything else. The logo loads asynchronously and is drawn
+    // onto the texture when it arrives; the photo is still inside the camera by then.
+    const backTex = canvasTexture(256, Math.round(256 / fa), (x, w, h) => {
+        x.fillStyle = PAL.indigo;
+        x.fillRect(0, 0, w, h);
+        x.fillStyle = PAL.sea;
+        x.fillRect(14, 14, w - 28, h - 28);
+        x.strokeStyle = PAL.royal;
+        x.lineWidth = 4;
+        x.strokeRect(14, 14, w - 28, h - 28);
+        disc(x, w / 2, h / 2, Math.min(w, h) * 0.24 + 5, INK);
     });
+    const logo = new Image();
+    logo.onload = () => {
+        const c = backTex.image;
+        const r = Math.min(c.width, c.height) * 0.24;
+        c.getContext('2d').drawImage(logo, c.width / 2 - r, c.height / 2 - r, 2 * r, 2 * r);
+        backTex.needsUpdate = true;
+    };
+    logo.src = `${import.meta.env.BASE_URL}favicon.svg`;
+    const backMat = new THREE.MeshBasicMaterial({map: backTex, transparent: true, clippingPlanes: [slotClip]});
     const back = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), backMat);
     back.rotation.y = Math.PI;
     photoRig.add(back);

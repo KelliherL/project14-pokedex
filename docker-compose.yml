@@ -1,0 +1,107 @@
+# Two ways to run (see README):
+#   Windows: `docker compose up -d`                    mongo + frontend; backend runs
+#            natively via backend_launch.bat (Docker Desktop can't pass a webcam through)
+#   Linux:   `docker compose --profile backend up`     mongo + frontend + backend
+#
+# One-shot jobs, run by install_windows.bat / install_linux.sh and removed after:
+#   docker compose --profile setup run --rm cards      card reference images -> data/cards
+#   docker compose --profile setup run --rm weights    DINOv2 weights -> torch-cache (Linux)
+#   docker compose --profile seed run --rm seed        Pokémon data -> mongo
+#
+# Settings come from .env (copied from .env.example by the install scripts).
+services:
+  mongo:
+    image: mongo:7
+    # host port only; set MONGO_PORT in .env if a local mongo already holds 27017
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Published on 5173 so the browser origin matches the backend's CORS list.
+  # No depends_on backend: on Windows the backend isn't a compose service.
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    ports:
+      - "5173:80"
+
+  backend:
+    profiles: ["backend"]
+    image: pokedex-backend
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    environment:
+      # inside compose mongo is reached by service name, not localhost
+      MONGO_URL: mongodb://mongo:27017/
+      MODE: ${MODE:-card}
+    devices:
+      - "${CAMERA_DEVICE:-/dev/video0}:/dev/video0"
+    ports:
+      - "8000:8000"
+    volumes:
+      # data stays on the host: new cards/figurines need a restart, not a rebuild
+      - ./data:/app/data
+      # DINOv2 weights from torch.hub (figurine mode) survive rebuilds
+      - torch-cache:/root/.cache/torch
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  # Seeds PokeVision.TestingDatabase. Shares mongo's network namespace so the
+  # seeder's hardcoded 127.0.0.1:27017 reaches it. Re-runs crash on the first
+  # duplicate _id having changed nothing, which is reported as already seeded.
+  seed:
+    profiles: ["seed"]
+    build:
+      context: .
+      dockerfile: docker/seed.Dockerfile
+    network_mode: "service:mongo"
+    command: >-
+      sh -c "dotnet ProcessPokeData.dll > /tmp/seed.log 2>&1
+      && tail -n 1 /tmp/seed.log
+      || (grep -q 'duplicate key' /tmp/seed.log && echo 'already seeded - skipping')
+      || (cat /tmp/seed.log; exit 1)"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  # Downloads the card reference images (gitignored) into ./data/cards with the
+  # repo's own script, so no host bash/curl is needed. Files are handed back
+  # to whoever owns ./data on the host.
+  cards:
+    profiles: ["setup"]
+    image: python:3.12-slim
+    working_dir: /repo
+    volumes:
+      - ./scripts:/repo/scripts:ro
+      - ./data/cards:/repo/data/cards
+    command: >-
+      bash -c "n=$$(ls data/cards/images 2>/dev/null | wc -l);
+      if [ $$n -ge 100 ]; then echo \"card images already cached ($$n) - skipping\"; exit 0; fi;
+      apt-get update -qq && apt-get install -y -qq curl > /dev/null
+      && bash scripts/download_card_set.sh
+      && chown -R $$(stat -c %u:%g data/cards) data/cards"
+
+  # Pre-downloads the DINOv2 weights the backend container uses in figurine
+  # mode, so the first figurine scan doesn't stall on an ~85 MB download.
+  weights:
+    profiles: ["setup"]
+    image: pokedex-backend
+    volumes:
+      - torch-cache:/root/.cache/torch
+    command: >-
+      python -c "import torch;
+      torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14_reg', verbose=False);
+      print('DINOv2 weights cached')"
+
+volumes:
+  mongo-data:
+  torch-cache:

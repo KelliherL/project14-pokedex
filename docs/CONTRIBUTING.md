@@ -26,24 +26,29 @@ See the README quickstart. The check that matters before pushing:
 
 (macOS/Linux: `.venv/bin/python`.)
 
-## Environment reproducibility (and why there is no Dockerfile)
+## Environment reproducibility (and where Docker fits)
 
-We considered Docker and decided against it for this repo:
+Now that the backend is a headless FastAPI service with a Mongo database and a
+separate frontend, there is a Docker setup: `docker-compose.yml` +
+`docker/*.Dockerfile`, driven by `install_*`/`start_*` scripts (see the README):
 
-- The app's job is **webcam in, GUI window out, audio out** — the three
-  things containers handle worst on the Windows/macOS laptops the team
-  actually uses (no USB webcam passthrough on Docker Desktop; `cv2.imshow`
-  needs a display; the stub TTS is Windows-native speech).
-- The dependency surface is four pip packages, all prebuilt wheels. A venv +
-  `requirements.txt` + Python 3.11–3.13 already reproduces cleanly.
-- The event target is a bare offline laptop — a container layer fights the
-  deployment model.
+- **Linux** — 3 containers: mongo, frontend (nginx serving the Vite build) and
+  the backend (`backend` compose profile), with the host webcam passed in as
+  `/dev/video0`.
+- **Windows** — 2 containers (mongo, frontend); the backend runs natively from
+  the venv via `backend_launch.bat`. Docker Desktop has no USB webcam
+  passthrough, `cv2.imshow` (dev window) needs a display, and the stub TTS is
+  Windows-native speech.
+- **One-off jobs** run by the installers and removed afterwards
+  (`docker compose run --rm`): `seed` (Mongo, via `ProcessPokeData` from
+  `scripts/pokedb-setup.zip`), `cards` (reference images via
+  `scripts/download_card_set.sh`) and `weights` (DINOv2 for the Linux backend).
+- `data/` is mounted into the backend, not baked into the image; settings live
+  in `.env` (template: `.env.example`), read by compose and by `app/server.py`.
 
-Reproducibility is instead enforced by: pinned requirements, the **headless
-selftest as the "does your machine work" gate**, and CI running the identical
-checks on a clean machine every push. If a headless backend service appears
-later (the FastAPI option in TECH-STACK.md), dockerizing *that* is worth
-revisiting.
+Either way, reproducibility is enforced by: pinned requirements, the
+**headless selftest as the "does your machine work" gate**, and CI running the
+identical checks on a clean machine every push.
 
 ## Style
 

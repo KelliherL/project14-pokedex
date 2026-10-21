@@ -1,0 +1,19 @@
+.env
+.git
+.github
+.idea
+.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/node_modules
+frontend/dist
+frontend/Scripts
+Images
+Models
+docs
+tests
+scripts/net9.0
+# mounted into the backend at runtime instead (docker-compose.yml), so new
+# cards/figurines don't need an image rebuild
+data

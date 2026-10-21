@@ -4,6 +4,10 @@
 # any machine without git-lfs installed. Large-asset policy is enforced by the
 # repo-weight check in CI instead, which needs nothing installed locally.
 * text=auto
+# shell scripts run on Linux (docker_launch.sh); CRLF breaks the shebang
+*.sh text eol=lf
+# batch files with LF endings can break goto/labels in cmd
+*.bat text eol=crlf
 *.png binary
 *.webp binary
 *.jpg binary

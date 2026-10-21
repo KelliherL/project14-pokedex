@@ -6,3 +6,4 @@ __pycache__/
 data/cards/*
 !data/cards/hashes.json
 /.idea/
+.env

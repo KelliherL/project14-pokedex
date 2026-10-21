@@ -10,17 +10,22 @@ CaptureWorker runs; the shared constants/functions are imported from there
 rather than duplicated.
 """
 
+import os
 import sys
 
 import cv2
 
 from app import overlay
 from app.capture import (
+    EXIT_FORCE,
+    EXIT_QUIT,
+    EXIT_RESTART,
     FALLBACK_AFTER_FRAMES,
     FALLBACK_EVERY,
     PLATE_FRAMES,
     UNLOCK_AFTER_EMPTY_FRAMES,
     build_figurine_recogniser,
+    clear_console,
     figurine_lock,
     lock_from,
 )
@@ -55,6 +60,7 @@ def run(camera: int, mode: str, mute: bool) -> int:
 
     hard_streak = 0
     frame_no = 0
+    exit_code = EXIT_QUIT
     while True:
         ok, frame = cap.read()
         if not ok:
@@ -117,6 +123,14 @@ def run(camera: int, mode: str, mute: bool) -> int:
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
             break
+        elif key == ord("r"):
+            exit_code = EXIT_RESTART
+            break
+        elif key == ord("x"):
+            print("force shutdown")
+            os._exit(EXIT_FORCE)
+        elif key == ord("c"):
+            clear_console()
         elif key == ord("m"):
             mode = "figurine" if mode == "card" else "card"
             votes.reset()
@@ -137,4 +151,4 @@ def run(camera: int, mode: str, mute: bool) -> int:
 
     cap.release()
     cv2.destroyAllWindows()
-    return 0
+    return exit_code

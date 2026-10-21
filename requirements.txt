@@ -9,3 +9,7 @@ uvicorn[standard]
 torch>=2.2
 torchvision>=0.17
 pymongo
+# reads the repo .env (MONGO_URL) for native runs
+python-dotenv
+# DirectShow camera names for backend_launch.bat's camera menu (scripts/list_cameras.py).
+pygrabber; sys_platform == "win32"

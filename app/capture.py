@@ -7,6 +7,7 @@ The identify/vote/lock logic is the same pipeline that used to live inline
 in app/main.py's loop; `lock_from` is moved here verbatim.
 """
 
+import os
 import sys
 import threading
 import time
@@ -39,6 +40,16 @@ FALLBACK_EVERY = 8
 PLATE_FRAMES = 12
 
 STREAM_JPEG_QUALITY = 80
+
+# Process exit codes backend_launch.bat branches on: quit ends the launcher,
+# restart returns to its menu, force skips all cleanup and ends the launcher.
+EXIT_QUIT = 0
+EXIT_RESTART = 3
+EXIT_FORCE = 9
+
+
+def clear_console() -> None:
+    os.system("cls" if sys.platform == "win32" else "clear")
 
 
 def build_figurine_recogniser():
@@ -127,7 +138,7 @@ class CaptureWorker:
     """
 
     def __init__(self, camera: int, mode: str = "card", mute: bool = False,
-                 on_quit: Callable[[], None] | None = None):
+                 on_exit: Callable[[int], None] | None = None):
         backend = cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY
         self.cap = cv2.VideoCapture(camera, backend)
         if not self.cap.isOpened():
@@ -146,7 +157,7 @@ class CaptureWorker:
 
         self.mode = mode
         self.mute = mute
-        self._on_quit = on_quit
+        self._on_exit = on_exit
         self._votes = VoteBuffer()
         self._burst = BurstGate()
         self._locked: Identification | None = None
@@ -313,17 +324,22 @@ class CaptureWorker:
         speak(self.dex.line_for(shown), mute=self.mute)
 
     def _listen_keys(self) -> None:
-        """Headless console key listener so m/space/b/q keep working with no
-        cv2 window open. Windows-only (msvcrt); --dev-window is the fallback
-        for keyboard control on other platforms."""
+        """Headless console key listener so the keys keep working with no cv2
+        window open. Windows-only (msvcrt); --dev-window is the fallback for
+        keyboard control on other platforms.
+
+        Runs on its own daemon thread, so 'x' still works when the capture
+        thread or uvicorn is stuck."""
         if sys.platform != "win32":
             print("note: headless key listener needs Windows (msvcrt); "
                   "use --dev-window for keyboard control on this platform")
             return
         import msvcrt
 
-        print("[capture] keys: space = identify+speak · m = switch card/figurine · "
-              "b = capture figurine background plate · q = quit")
+        keys = ("space = identify+speak · m = switch card/figurine · "
+                "b = capture figurine background plate · c = clear console · "
+                "r = restart (launcher menu) · q = quit · x = force shutdown")
+        print(f"[capture] keys: {keys}")
         while not self.stop_event.is_set():
             if msvcrt.kbhit():
                 key = msvcrt.getch()
@@ -333,9 +349,15 @@ class CaptureWorker:
                     self.switch_mode()
                 elif key in (b"b", b"B"):
                     self.capture_background_plate()
-                elif key in (b"q", b"Q"):
+                elif key in (b"c", b"C"):
+                    clear_console()
+                    print(f"[capture] mode: {self.mode} · keys: {keys}")
+                elif key in (b"x", b"X"):
+                    print("[capture] force shutdown")
+                    os._exit(EXIT_FORCE)
+                elif key in (b"q", b"Q", b"r", b"R"):
                     self.stop_event.set()
-                    if self._on_quit is not None:
-                        self._on_quit()
+                    if self._on_exit is not None:
+                        self._on_exit(EXIT_RESTART if key in (b"r", b"R") else EXIT_QUIT)
                     break
             time.sleep(0.05)

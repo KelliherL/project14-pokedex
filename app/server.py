@@ -5,6 +5,8 @@ published snapshot (app/capture.py) — never the camera directly.
 
 import asyncio
 import json
+import os
+from pathlib import Path
 from app.capture import CaptureWorker
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,8 +17,18 @@ ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 BOUNDARY = "frame"
 POLL_SECONDS = 0.01
 
+# Native runs read the repo's .env; in docker-compose MONGO_URL is already set
+# (to the mongo service) and load_dotenv leaves existing variables alone.
+# Optional so venvs made before python-dotenv was added keep working.
 try:
-    client = MongoClient("mongodb://localhost:27017/")
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+except ImportError:
+    pass
+MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017/")
+
+try:
+    client = MongoClient(MONGO_URL)
     database = client.get_database("PokeVision")
 except Exception as e:
     print("An error occurred when connecting to the database")

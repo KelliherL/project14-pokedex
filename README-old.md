@@ -1,0 +1,156 @@
+# Project 14 — Pokédex AI Outreach Activity
+
+COMPX374-26B group project (client: Awhi Goodall, University of Waikato).
+A working Pokédex for Nerdfest 2026: hold a Pokémon card or figurine up to a
+camera; it recognises it, speaks the Pokédex entry in the classic robotic
+voice, and — the actual point — **shows how it knew**: where the AI looked,
+what it matched, how sure it was.
+
+This repo holds the **backend and computer-vision pipeline** plus the project
+docs. The event UI and the Pokédex database are separate workstreams that
+plug in at documented seams — start at [docs/INTERFACES.md](docs/INTERFACES.md)
+if that's your part.
+
+```mermaid
+flowchart LR
+    cam["Webcam"] --> rec["Recognisers<br/>cards: real · figurines: stub"]
+    rec --> ident["Identification<br/>(the frontend contract)"]
+    db[("Dex data<br/>(the database seam)")] --> line["Spoken line + captions"]
+    ident --> line
+    ident --> ui["UI — dev harness today,<br/>event UI is its own workstream"]
+    line --> tts["TTS"]
+```
+
+## Status: walking skeleton
+
+The full loop — identify → explain → speak — runs end to end today:
+
+| Piece | State |
+|---|---|
+| Card recognition | **Real.** Contour detect → aspect-aware rectify → pHash+dHash → calibrated nearest-neighbour against a locally cached TCGdex set (Base Set) → 6-of-10 temporal vote → ORB+RANSAC geometric verify at lock-on, with live explanation overlay. |
+| Figurine recognition | **Real.** Background-plate crop → frozen DINOv2 embedding → cosine kNN over turntable captures of nine 3D-printed figurines → burst-of-10 vote → margin accept gate, with exemplar-strip explanation. Identifies all nine and refuses everything else (all 70 card photos rejected). Two limits stated up front: it recognises **those specific figurines, not species**, and every accuracy number is **same-session** — see [the figurine lane note](docs/research/2026-09-15-figurine-lane-measured.md). |
+| Dex data | Real subset (69 species via PokeAPI), served through the database-agnostic `DexDataSource` seam. |
+| Speech | Stub-grade (Windows built-in voice, offline). Pre-generated Piper WAVs later. |
+| UI | OpenCV **dev harness** only — the event UI is deliberately unbuilt. |
+
+## Try it
+
+You need a webcam. Install once, then start. Afterwards open
+<http://localhost:5173>.
+
+### Windows
+
+```
+install_windows.bat     REM once — may need a restart, then run it again
+start_windows.bat       REM every time
+```
+
+The installer checks for **WSL**, **Docker Desktop** and **Python** and offers
+to install whatever is missing (it asks first). The database and frontend run
+in Docker; the backend runs natively, because Docker Desktop can't pass a
+webcam through to a container. `start_windows.bat` starts the containers, then
+opens the backend menu (`backend_launch.bat`) — pick a server mode and camera.
+
+### Linux
+
+```
+./install_linux.sh      # once — offers to install Docker if it's missing
+./start_linux.sh        # every time: pick mode + webcam (Ctrl+C stops)
+./start_linux.sh down   # remove the containers (database is kept)
+```
+
+Everything runs in three containers: database, frontend and backend.
+
+### What the installers do
+
+- Copy `.env.example` to `.env` — the settings file (ports, Linux mode/camera).
+- Download the card reference images (TCGdex Base Set) and the figurine model
+  weights, which aren't in git.
+- Build the images and seed the Pokémon database once (a one-off container,
+  removed afterwards).
+
+Both are safe to re-run. If port 27017 is already used (another MongoDB), set
+`MONGO_PORT=27018` in `.env`.
+
+`data/` stays on the host and is mounted into the backend container, so adding
+cards or figurines (`scripts/build_card_db.py`, `scripts/build_figurine_index.py`)
+only needs a backend restart, not an image rebuild.
+
+## Development setup
+
+Prereqs: Python 3.11+ and Git Bash (Windows ships it with Git; the download
+script uses bash + curl).
+
+```
+python -m venv .venv
+.venv/Scripts/python -m pip install -r requirements.txt -r requirements-dev.txt
+bash scripts/download_card_set.sh                    # cache Base Set (base1) from TCGdex
+.venv/Scripts/python scripts/selftest.py             # headless end-to-end check — must print ALL PASS
+```
+
+(macOS/Linux: use `.venv/bin/python`. The card hash DB and dex data are
+committed, so only the reference images need downloading.)
+
+Run the dev harness:
+
+```
+.venv/Scripts/python -m app.main            # webcam kiosk loop
+.venv/Scripts/python -m app.main --mute     # print instead of speaking
+.venv/Scripts/python -m app.main --camera 1 # pick a different webcam
+```
+
+Keys: `space` identify + speak · `m` switch card/figurine mode · `q` quit.
+
+## Layout
+
+```
+app/
+  main.py                  capture loop, keys, wiring (DEV HARNESS — not the event UI)
+  overlay.py               explanation panel drawn on the frame
+  dex.py                   species -> spoken line, via a pluggable source
+  dex_source.py            DexDataSource protocol + bundled JSON backend  ← database seam
+  tts.py                   Windows System.Speech (thread, offline)
+  recognisers/
+    base.py                Identification dataclass  ← frontend contract
+    card_matcher.py        real: detect -> rectify -> hash -> calibrated NN match
+    figurine_stub.py       stub: canned closed-set output
+scripts/
+  download_card_set.sh     cache one TCGdex set (JSON + images), parallel curl
+  build_card_db.py         hash the cached set into data/cards/hashes.json
+  fetch_dex_data.py        cache PokeAPI entries for the DB's species
+  selftest.py              synthetic end-to-end verification (runs in CI)
+tests/                     unit tests (seam swappability) — pytest
+data/
+  cards/hashes.json        committed (derived, small)
+  cards/images/            gitignored (TPC IP — cache locally, never commit)
+  dex.json                 committed (small curated subset)
+docs/                      all project documentation (see below)
+```
+
+## Documentation
+
+| Doc | What it is |
+|---|---|
+| [docs/VISION.md](docs/VISION.md) | What the activity is and what success looks like |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Two-recogniser design, diagrams, spikes, risks |
+| [docs/TECH-STACK.md](docs/TECH-STACK.md) | Proposed stack with rationale + alternatives |
+| [docs/INTERFACES.md](docs/INTERFACES.md) | **The team seams** — database + frontend contracts |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Branch/PR workflow, CI, style, data rules |
+| [docs/CLIENT-QUESTIONS.md](docs/CLIENT-QUESTIONS.md) | First client meeting — for the spokesperson |
+| [docs/research/](docs/research/) | The evidence base behind every claim above |
+| [docs/research/2026-08-07-measured-baselines.md](docs/research/2026-08-07-measured-baselines.md) | **Headline evidence** — the approach measured on our own hardware |
+| [docs/research/2026-09-15-figurine-lane-measured.md](docs/research/2026-09-15-figurine-lane-measured.md) | The figurine recogniser, built and measured on real figurines |
+
+Everything is **preliminary until the first client meeting** — the docs exist
+so the meeting and the team discussion react to something concrete rather
+than to the abstract.
+
+## Known limitations (deliberate, tracked)
+
+- Otsu-threshold detection assumes a contrasting backdrop — which the real
+  station will guarantee physically (see docs/ARCHITECTURE.md).
+- Figurine mode is theatre; it says so on screen.
+- Dex entries are uncurated latest-English for now — kid-safe whitelisting is
+  a client sign-off item.
+- Verified lock-on is validated on synthetic stress scenes; real-webcam
+  validation (spike a′) closes it out.
