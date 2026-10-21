@@ -11,7 +11,7 @@
 
 ## What was measured on
 
-The 70 card photos in `Images/` — 34 distinct cards, English and Japanese,
+The 70 card photos in `assets/card-photos/` — 34 distinct cards, English and Japanese,
 each shot with and without glare, so glare is a controlled variable. Each
 subject was resolved to **every** TCGdex printing carrying an image (English
 by name search, Japanese via PokeAPI's `ja` species name into TCGdex's `ja`

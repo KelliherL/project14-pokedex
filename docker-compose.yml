@@ -1,10 +1,10 @@
 # Two ways to run (see README):
 #   Windows: `docker compose up -d`                    mongo + frontend; backend runs
-#            natively via backend_launch.bat (Docker Desktop can't pass a webcam through)
+#            natively via run/backend_launch.bat (Docker Desktop can't pass a webcam through)
 #   Linux:   `docker compose --profile backend up`     mongo + frontend + backend
 #
-# One-shot jobs, run by install_windows.bat / install_linux.sh and removed after:
-#   docker compose --profile setup run --rm cards      card reference images -> data/cards
+# One-shot jobs, run by run/install_windows.bat / run/install_linux.sh and removed after:
+#   docker compose --profile setup run --rm cards      card reference images -> backend/data/cards
 #   docker compose --profile setup run --rm weights    DINOv2 weights -> torch-cache (Linux)
 #   docker compose --profile seed run --rm seed        Pokémon data -> mongo
 #
@@ -48,7 +48,7 @@ services:
       - "8000:8000"
     volumes:
       # data stays on the host: new cards/figurines need a restart, not a rebuild
-      - ./data:/app/data
+      - ./backend/data:/app/data
       # DINOv2 weights from torch.hub (figurine mode) survive rebuilds
       - torch-cache:/root/.cache/torch
     depends_on:
@@ -73,16 +73,16 @@ services:
       mongo:
         condition: service_healthy
 
-  # Downloads the card reference images (gitignored) into ./data/cards with the
+  # Downloads the card reference images (gitignored) into ./backend/data/cards with the
   # repo's own script, so no host bash/curl is needed. Files are handed back
-  # to whoever owns ./data on the host.
+  # to whoever owns ./backend/data on the host.
   cards:
     profiles: ["setup"]
     image: python:3.12-slim
     working_dir: /repo
     volumes:
-      - ./scripts:/repo/scripts:ro
-      - ./data/cards:/repo/data/cards
+      - ./backend/scripts:/repo/scripts:ro
+      - ./backend/data/cards:/repo/data/cards
     command: >-
       bash -c "n=$$(ls data/cards/images 2>/dev/null | wc -l);
       if [ $$n -ge 100 ]; then echo \"card images already cached ($$n) - skipping\"; exit 0; fi;

@@ -1,10 +1,10 @@
-# Text normalisation only. Deliberately NO `filter=lfs` entries: Images/ and
-# Models/ are already committed as plain blobs, and declaring an LFS filter
+# Text normalisation only. Deliberately NO `filter=lfs` entries: assets/card-photos/ and
+# assets/figurine-videos/ are already committed as plain blobs, and declaring an LFS filter
 # over extensions that exist as plain objects makes checkout fail outright on
 # any machine without git-lfs installed. Large-asset policy is enforced by the
 # repo-weight check in CI instead, which needs nothing installed locally.
 * text=auto
-# shell scripts run on Linux (docker_launch.sh); CRLF breaks the shebang
+# shell scripts run on Linux (run/*.sh); CRLF breaks the shebang
 *.sh text eol=lf
 # batch files with LF endings can break goto/labels in cmd
 *.bat text eol=crlf

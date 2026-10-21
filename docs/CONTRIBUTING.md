@@ -19,12 +19,13 @@ demoable at all times — it is what we show the client on short notice.
 See the README quickstart. The check that matters before pushing:
 
 ```
+cd backend
 .venv/Scripts/python scripts/selftest.py    # must print ALL PASS
 .venv/Scripts/python -m pytest
 .venv/Scripts/python -m ruff check .
 ```
 
-(macOS/Linux: `.venv/bin/python`.)
+(macOS/Linux: `.venv/bin/python`. The venv lives in `backend/.venv`.)
 
 ## Environment reproducibility (and where Docker fits)
 
@@ -36,15 +37,15 @@ separate frontend, there is a Docker setup: `docker-compose.yml` +
   the backend (`backend` compose profile), with the host webcam passed in as
   `/dev/video0`.
 - **Windows** — 2 containers (mongo, frontend); the backend runs natively from
-  the venv via `backend_launch.bat`. Docker Desktop has no USB webcam
+  the venv via `run\backend_launch.bat`. Docker Desktop has no USB webcam
   passthrough, `cv2.imshow` (dev window) needs a display, and the stub TTS is
   Windows-native speech.
 - **One-off jobs** run by the installers and removed afterwards
   (`docker compose run --rm`): `seed` (Mongo, via `ProcessPokeData` from
-  `scripts/pokedb-setup.zip`), `cards` (reference images via
-  `scripts/download_card_set.sh`) and `weights` (DINOv2 for the Linux backend).
-- `data/` is mounted into the backend, not baked into the image; settings live
-  in `.env` (template: `.env.example`), read by compose and by `app/server.py`.
+  `backend/scripts/pokedb-setup.zip`), `cards` (reference images via
+  `backend/scripts/download_card_set.sh`) and `weights` (DINOv2 for the Linux backend).
+- `backend/data/` is mounted into the backend, not baked into the image; settings live
+  in `.env` (template: `.env.example`), read by compose and by `backend/app/server.py`.
 
 Either way, reproducibility is enforced by: pinned requirements, the
 **headless selftest as the "does your machine work" gate**, and CI running the
@@ -53,7 +54,7 @@ identical checks on a clean machine every push.
 ## Style
 
 - Python 3.11+ (CI runs 3.13), `ruff` with `line-length = 100`
-  (see `pyproject.toml`).
+  (see `backend/pyproject.toml`).
 - Docstrings say *why* and *what the module owns*, in plain language —
   match the existing files.
 - Keep modules small and behind their seams: storage only via
@@ -61,27 +62,27 @@ identical checks on a clean machine every push.
 
 ## Tests
 
-- `tests/` — unit tests, run by `pytest`. New behaviour ships with a test.
-- `scripts/selftest.py` — headless end-to-end check on synthetic scenes; it
+- `backend/tests/` — unit tests, run by `pytest`. New behaviour ships with a test.
+- `backend/scripts/selftest.py` — headless end-to-end check on synthetic scenes; it
   is the demo-readiness gate and runs in CI.
 - Once real hardware exists: recorded webcam clips become regression
   fixtures (glare / sleeve / plush — the documented failure modes).
 
 ## Data rules
 
-- **Never commit card images** (`data/cards/images/` is gitignored — The
+- **Never commit card images** (`backend/data/cards/images/` is gitignored — The
   Pokémon Company IP; each machine caches its own via
-  `scripts/download_card_set.sh`).
-- `data/cards/hashes.json` and `data/dex.json` are small derived artifacts
+  `backend/scripts/download_card_set.sh`).
+- `backend/data/cards/hashes.json` and `backend/data/dex.json` are small derived artifacts
   and are committed; rebuild them with the scripts if sources change.
 - No frames from any camera are ever written to disk — that is an event
   privacy commitment (VISION.md), and it starts as a development habit.
 - **Capture assets (video, photo sets) do not go in the repo.** Put them in
-  shared storage and link them from the docs. `Images/` and `Models/` predate
+  shared storage and link them from the docs. `assets/card-photos/` and `assets/figurine-videos/` predate
   this rule and stay as they are — rewriting shared history costs everyone a
   re-clone for no functional gain — but they are why the rule exists: they add
   ~437 MB that every clone now pays for, permanently. CI runs
-  `scripts/check_repo_weight.py`, which fails any commit adding a file over
+  `backend/scripts/check_repo_weight.py`, which fails any commit adding a file over
   2 MB outside the allowlist. (Deliberately not Git LFS: declaring an LFS
   filter over extensions already committed as plain blobs breaks checkout for
   anyone without git-lfs installed.)
@@ -89,5 +90,5 @@ identical checks on a clean machine every push.
   embeddings caches and experiment outputs are reproducible from their
   sources, so they belong in a scratch directory, not in git. The exceptions
   are the small committed artifacts the app needs at runtime:
-  `data/cards/hashes.json`, `data/dex.json`, and `data/figurines/`
+  `backend/data/cards/hashes.json`, `backend/data/dex.json`, and `backend/data/figurines/`
   (index ~335 KB plus exemplar thumbnails), each rebuildable with its script.

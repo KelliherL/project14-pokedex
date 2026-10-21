@@ -51,7 +51,7 @@
 ### **For visitors**
 
 - **Card recognition.** Hold a Pokémon card up to the camera. The Pokédex finds the card, straightens it out, and matches it against the Base Set (cached from TCGdex). It only commits to an answer once several frames agree and a geometric check confirms the match.
-- **Figurine recognition.** Recognises nine 3D-printed figurines from turntable reference captures, and rejects anything it hasn't seen rather than guessing.
+- **Figurine recognition.** Recognises ten 3D-printed figurines (nine species) from turntable reference captures, and rejects anything it hasn't seen rather than guessing.
 - **Pokédex-style device UI.** The live camera feed plays inside a Pokédex shell, with its Capture and History buttons.
 - **"How it knew" animation.** Pressing Capture zooms into the screen and plays an animated walkthrough of how an image classifier reaches its answer, with captions for each step. It ends on the backend's straightened crop of the actual card, alongside some real data on the card.
 - **Confidence panel.** Shows the straightened card next to the top five matches, each with a confidence bar.
@@ -62,13 +62,13 @@
 ### **For operators and developers**
 
 - **Live mode switching.** Switch between card and figurine mode from the backend console without restarting.
-- **Windows launcher.** `backend_launch.bat` sets up the venv, lists the OS's cameras by name, and takes single-key menu choices. It can relaunch with the last settings.
+- **Windows launcher.** `run\backend_launch.bat` sets up the venv, lists the OS's cameras by name, and takes single-key menu choices. It can relaunch with the last settings.
 - **Console controls.** Keys to restart, clear the console, quit, or force a shutdown while the backend runs.
 - **Dev harness.** An OpenCV debug window that draws the recognition pipeline's working over the frame, with no server or frontend needed.
 - **Pluggable data seams.** Dex data sits behind a database-agnostic interface (MongoDB in deployment, bundled JSON otherwise).
 - **One-step install on Windows and Linux.** An install script per OS checks for and offers to install everything needed (WSL, Docker Desktop and Python on Windows; Docker on Linux), downloads the data that isn't in git and seeds the database. A start script then runs it. On Linux everything runs in three Docker containers; on Windows the database and frontend run in Docker and the backend runs natively, because Docker Desktop can't pass a webcam through.
 - **Mostly offline.** Recognition, speech and dex data all run locally. The only exception is the results-screen artwork, which currently loads from the PokeAPI sprites repo.
-- **Tested.** Unit tests plus a headless end-to-end self-test (`scripts/selftest.py`) that runs in CI.
+- **Tested.** Unit tests plus a headless end-to-end self-test (`backend/scripts/selftest.py`) that runs in CI.
 
 ## Screenshots
 
@@ -96,7 +96,7 @@ flowchart LR
     Capture --> TTS["Text-to-speech"]
 ```
 
-- **Card lane** (`app/recognisers/card_matcher.py`, `voting.py`, `verify.py`)
+- **Card lane** (`backend/app/recognisers/card_matcher.py`, `voting.py`, `verify.py`)
   1. **Find the card.** Each webcam frame is searched for a card-shaped
      outline: a four-cornered shape with a card's proportions that doesn't
      fill the whole frame.
@@ -105,7 +105,7 @@ flowchart LR
   3. **Fingerprint it.** The straightened card is shrunk into two small
      "perceptual hashes" (pHash and dHash): 64-bit fingerprints that stay
      nearly the same when the lighting or sharpness changes. The fingerprint
-     is compared against every card in `data/cards/hashes.json` by counting
+     is compared against every card in `backend/data/cards/hashes.json` by counting
      how many bits differ. The card with the fewest differences is that
      frame's best guess.
   4. **Vote across frames.** One frame can be fooled by glare or blur, so no
@@ -121,7 +121,7 @@ flowchart LR
      refused and voting carries on. If the reference images aren't downloaded,
      this step is skipped.
 
-- **Figurine lane** (`app/recognisers/figurine_knn.py`, `voting.py`)
+- **Figurine lane** (`backend/app/recognisers/figurine_knn.py`, `voting.py`)
   1. **Isolate the figurine.** With a background plate (press `b` with the
      stand empty), anything that differs from the empty stand is cropped out
      as the figurine. Without a plate it uses a centre crop.
@@ -131,7 +131,7 @@ flowchart LR
      **embedding**: a list of 384 numbers describing what the object looks
      like, where similar-looking objects get similar numbers.
   3. **Nearest neighbour.** When the index is built, every reference frame of
-     every figurine (`data/figurines/index.npz`) has been embedded the same
+     every figurine (`backend/data/figurines/index.npz`) has been embedded the same
      way. The live embedding is compared with all of them using cosine
      similarity (1.0 = identical direction), and the single closest reference
      frame names the figurine. This is a k-nearest-neighbour classifier with
@@ -154,7 +154,7 @@ For more detail see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/INTER
 | Backend | Python 3.11+ (3.12 in Docker), FastAPI + uvicorn (HTTP, MJPEG stream, WebSocket), OpenCV (camera capture), PyMongo, python-dotenv |
 | Recognition | ImageHash + Pillow (card fingerprints), OpenCV SIFT + RANSAC (card verification), PyTorch + torchvision running DINOv2 ViT-S/14 (figurine embeddings), NumPy |
 | Frontend | React 19, Vite 8, Tailwind CSS 4, three.js, ESLint (airbnb config) |
-| Data | MongoDB 7 (Pokédex entries, seeded by `ProcessPokeData`), JSON/NumPy reference files in `data/` (card hashes, figurine index, dex subset) |
+| Data | MongoDB 7 (Pokédex entries, seeded by `ProcessPokeData`), JSON/NumPy reference files in `backend/data/` (card hashes, figurine index, dex subset) |
 | Speech | Windows built-in `System.Speech` voice, offline |
 | Deployment | Docker Compose (MongoDB, nginx serving the frontend build, backend on Linux) + install/start scripts per OS |
 
@@ -190,17 +190,17 @@ cd project14-pokedex
 ### Quick start — Windows
 
 ```bat
-install_windows.bat
-start_windows.bat
+run\install_windows.bat
+run\start_windows.bat
 ```
 
-1. **`install_windows.bat`** (once). If WSL or Docker Desktop had to be
+1. **`run\install_windows.bat`** (once). If WSL or Docker Desktop had to be
    installed, it asks you to restart Windows. After the restart, run it again
    and it carries on from where it stopped. If Python had to be installed,
    open a new terminal and run it again.
-2. **`start_windows.bat`** (every time). It starts Docker Desktop if needed,
+2. **`run\start_windows.bat`** (every time). It starts Docker Desktop if needed,
    starts the **database and frontend containers**, then opens the backend
-   menu (`backend_launch.bat`) in the same window. Pick a server mode and a
+   menu (`run\backend_launch.bat`) in the same window. Pick a server mode and a
    camera, then open <http://localhost:5173>.
 3. When you quit the backend, it asks whether to stop the containers too.
 
@@ -210,18 +210,18 @@ can't pass a USB webcam through to a container.
 ### Quick start — Linux
 
 ```bash
-./install_linux.sh
-./start_linux.sh
+./run/install_linux.sh
+./run/start_linux.sh
 ```
 
-1. **`./install_linux.sh`** (once). It offers to install Docker if it's
+1. **`./run/install_linux.sh`** (once). It offers to install Docker if it's
    missing. If your user isn't in the `docker` group, it uses `sudo docker`
    and prints how to fix that.
-2. **`./start_linux.sh`** (every time). It asks for card or figurine mode and
+2. **`./run/start_linux.sh`** (every time). It asks for card or figurine mode and
    the webcam device (default `/dev/video0`), then starts all **three
    containers**: database, frontend and backend. Open
    <http://localhost:5173>. Ctrl+C stops it.
-3. `./start_linux.sh logs` follows the logs. `./start_linux.sh down` removes
+3. `./run/start_linux.sh logs` follows the logs. `./run/start_linux.sh down` removes
    the containers; the database is kept.
 
 ### What the installers do
@@ -230,37 +230,40 @@ Both are safe to re-run: finished steps are skipped.
 
 1. Create **`.env`** from `.env.example` (see [Configuration](#configuration)).
 2. Download the **card reference images** (TCGdex Base Set) into
-   `data/cards/images/`. They're needed for the geometric check that confirms
+   `backend/data/cards/images/`. They're needed for the geometric check that confirms
    a card match, and they aren't stored in git.
 3. Download the **figurine model weights** (DINOv2, ~85 MB), so the first
    figurine scan doesn't stall on a download.
 4. Build the Docker images (the first build takes several minutes).
 5. **Seed MongoDB** with the Pokémon data, using the team's `ProcessPokeData`
-   seeder from `scripts/pokedb-setup.zip`.
+   seeder from `backend/scripts/pokedb-setup.zip`.
 
-Steps 2, 3 and 5 run as one-off containers that are deleted when they finish.
+Steps 2 and 5 (and step 3 on Linux) run as one-off containers that are deleted
+when they finish; on Windows step 3 runs in `backend\.venv` instead.
 Only the database and frontend (plus the backend on Linux) stay running.
 
-On Windows the installer also creates the backend's `.venv` and installs
-`requirements.txt` into it, so `backend_launch.bat` is ready to go.
+On Windows the installer also creates the backend's venv (`backend\.venv`) and
+installs `backend\requirements.txt` into it, so `run\backend_launch.bat` is ready to go.
 
 | | Windows | Linux |
 |---|---|---|
 | Containers while running | 2: `mongo`, `frontend` | 3: `mongo`, `frontend`, `backend` |
-| Backend | native, via `backend_launch.bat` | Docker, webcam passed through |
+| Backend | native, via `run\backend_launch.bat` | Docker, webcam passed through |
 | Frontend | <http://localhost:5173> | <http://localhost:5173> |
 | Backend API | <http://localhost:8000> | <http://localhost:8000> |
 
 ### Running the backend manually
 
-**Windows:** `start_windows.bat` opens `backend_launch.bat` for you, and you
+**Windows:** `run\start_windows.bat` opens `run\backend_launch.bat` for you, and you
 can also run it on its own while the containers are up.
 
-When `backend_launch.bat` is run it will ask for what mode you want to run it in as well as the camera you want to use. The UI for this bat script also contains some other useful options like restarting if you are adding things to the card recognition, as well as cleaning out the logs.
+When `run\backend_launch.bat` is run it will ask for what mode you want to run it in as well as the camera you want to use. The UI for this bat script also contains some other useful options like restarting if you are adding things to the card recognition, as well as cleaning out the logs.
 
-**Manual** (from the activated `.venv`):
+**Manual** (from the repo root):
 
 ```bash
+cd backend
+.venv\Scripts\activate            # Linux/macOS: source .venv/bin/activate
 python -m app.main --mode card --camera 0
 ```
 
@@ -293,31 +296,38 @@ Alternatively use your IDE of choice and use the `package.json` dev script to ru
 
 ### Adding cards and figurines
 
-No model is trained. Both lanes compare against reference data in `data/`:
+No model is trained. Both lanes compare against reference data in `backend/data/`.
+Run the build scripts with `backend\.venv` activated:
 
-- **Cards.** Put the card's image in `data/cards/images/` and its info in
-  `data/cards/meta/`, then run `python scripts/build_card_db.py` to regenerate
-  `data/cards/hashes.json`. This takes seconds.
-- **Figurines.** Add the figurine to `data/figurines/sources.json`, then run
-  `python scripts/build_figurine_index.py`. It embeds the reference photos or
+- **Cards.** Put the card's image in `backend/data/cards/images/` and its info in
+  `backend/data/cards/meta/`, then run `python backend/scripts/build_card_db.py` to regenerate
+  `backend/data/cards/hashes.json`. This takes seconds.
+- **Figurines.** Add the figurine to `backend/data/figurines/sources.json`, then run
+  `python backend/scripts/build_figurine_index.py`. The `source` path in
+  `sources.json` is relative to the repo root, e.g.
+  `assets/figurine-videos/Pikachu Model.mov`. The script embeds the reference photos or
   turntable video and writes `index.npz`, `labels.json` and `exemplars/`. This
   takes minutes on a CPU.
 
-**Then restart the backend**: re-run `backend_launch.bat` on Windows, or
-`docker compose restart backend` on Linux. `data/` is mounted into the backend
+**Then restart the backend**: re-run `run\backend_launch.bat` on Windows, or
+`docker compose restart backend` on Linux. `backend/data/` is mounted into the backend
 container rather than baked into the image, so **no rebuild is needed**.
 
 ## Usage
 
 Beyond starting the software and ensuring that all the different containers are working together, all it takes to operate this software in kiosk mode is to:
 1. Ensure the backend is launched into card mode
-2. Ensure that the backend, frontend, and database containers are running in a properly setup state
+2. Ensure that the database and frontend containers are running, plus the backend (natively via `run\start_windows.bat` on Windows, or as a container on Linux)
 3. Navigate to `http://localhost:5173`
 4. Show cards to the camera
 5. When the confidence is showing the correct card hit capture (this will then play the animation)
 
 **Backend console keys**
-These are keys that can be pressed when clicked into the backend window to perform actions. These keys may only be avaliable when the dev harness is running. 
+These are keys that can be pressed when clicked into the backend window to perform actions:
+
+- **Server mode on Windows:** press them in the `run\backend_launch.bat` console.
+- **Dev-window mode:** press them in the OpenCV window.
+- **Linux backend container:** not available (the console key listener is Windows-only).
 
 | Key | Action |
 |---|---|
@@ -341,53 +351,61 @@ it when run natively. The defaults work as-is; change them only for a clash
 |---|---|---|---|
 | `MONGO_PORT` | `.env` | `27017` | Port on your machine where the MongoDB container is published. Change it if another MongoDB already uses 27017. |
 | `MONGO_URL` | `.env` | `mongodb://localhost:${MONGO_PORT}/` | Where the **native** backend (Windows) finds MongoDB. Follows `MONGO_PORT` automatically. The Linux backend container ignores it and uses `mongodb://mongo:27017/` inside Docker. |
-| `MODE` | `.env` | `card` | Recognition mode for the **Linux** backend container: `card` or `figurine`. `start_linux.sh` asks, using this as the default. |
-| `CAMERA_DEVICE` | `.env` | `/dev/video0` | Webcam passed into the **Linux** backend container. `start_linux.sh` asks, using this as the default. |
+| `MODE` | `.env` | `card` | Recognition mode for the **Linux** backend container: `card` or `figurine`. `run/start_linux.sh` asks, using this as the default. |
+| `CAMERA_DEVICE` | `.env` | `/dev/video0` | Webcam passed into the **Linux** backend container. `run/start_linux.sh` asks, using this as the default. |
 
 Fixed in code (not in `.env`): the backend's port (`8000`, `--port` flag), the
 backend address the frontend calls (`http://localhost:8000`,
 `frontend/src/App.jsx`) and the frontend origin the backend allows
-(`http://localhost:5173`, `app/server.py`). On Windows the mode and camera are
-picked in the `backend_launch.bat` menu instead. Feel free to adjust these within the code yourself.
+(`http://localhost:5173`, `backend/app/server.py`). On Windows the mode and camera are
+picked in the `run\backend_launch.bat` menu instead. Feel free to adjust these within the code yourself.
 
 ## Project structure
 
 ```text
 project14-pokedex/
-├── app/                   # Backend: camera capture loop, FastAPI server, text-to-speech
-│   └── recognisers/       #   card matcher + verifier, figurine DINOv2 classifier, voting
+├── backend/               # Python backend
+│   ├── app/               #   camera capture loop, FastAPI server, text-to-speech
+│   │   └── recognisers/   #     card matcher + verifier, figurine DINOv2 classifier, voting
+│   ├── data/              #   reference data loaded at startup (mounted into Docker)
+│   │   ├── cards/         #     hashes.json (committed); images/ + meta/ downloaded by the installer
+│   │   ├── figurines/     #     index.npz embeddings, labels.json, exemplar thumbnails
+│   │   └── dex.json       #     bundled Pokédex subset (PokeAPI)
+│   ├── scripts/           #   data build tools (card DB, figurine index, dex data), selftest,
+│   │                      #     card download, DB seeder (pokedb-setup.zip)
+│   ├── tests/             #   unit tests (pytest)
+│   ├── requirements.txt   #   (+ requirements-dev.txt, pyproject.toml)
+│   └── .venv/             #   created by the Windows installer (not committed)
 ├── frontend/              # React kiosk UI (Pokédex shell, animation, results screen)
-├── data/                  # Reference data the backend loads at startup (mounted into Docker)
-│   ├── cards/             #   hashes.json (committed); images/ + meta/ downloaded by the installer
-│   ├── figurines/         #   index.npz embeddings, labels.json, exemplar thumbnails
-│   └── dex.json           #   bundled Pokédex subset (PokeAPI)
-├── scripts/               # Data build tools (card DB, figurine index, dex data), selftest,
-│                          #   card download, DB seeder (pokedb-setup.zip), ensure_docker.bat
+├── run/                   # Install and start scripts — the entry point
+│   ├── install_windows.bat    # Windows: install once
+│   ├── start_windows.bat      # Windows: start containers, then the backend launcher
+│   ├── backend_launch.bat     # Windows: native backend menu (mode + camera)
+│   ├── ensure_docker.bat      # Windows: starts Docker Desktop if it isn't running
+│   ├── install_linux.sh       # Linux: install once
+│   └── start_linux.sh         # Linux: start all three containers
 ├── docker/                # Dockerfiles: backend, frontend (build + nginx), DB seeder
 ├── docker-compose.yml     # mongo + frontend; backend (Linux) and one-off setup jobs via profiles
 ├── .env.example           # Settings template, copied to .env by the installers
-├── install_windows.bat    # Windows: install once
-├── start_windows.bat      # Windows: start containers, then the backend launcher
-├── backend_launch.bat     # Windows: native backend menu (mode + camera)
-├── install_linux.sh       # Linux: install once
-├── start_linux.sh         # Linux: start all three containers
-├── Models/                # Turntable videos of the 3D-printed figurines (figurine index source)
-├── Images/                # Team photos of real cards, normal and glare, EN and JP (test data)
-├── docs/                  # Design and architecture docs, research notes
-└── tests/                 # Backend unit tests (pytest)
+├── assets/                # Team-made capture data (not loaded by the app)
+│   ├── card-photos/       #   photos of real cards, normal and glare, EN and JP (test data)
+│   └── figurine-videos/   #   turntable videos of the 3D-printed figurines (figurine index source)
+└── docs/                  # Design and architecture docs, research notes, the standalone
+                           #   recognition explainer (HTML) and the previous README
 ```
 
 ## Testing
 Tests have not been considered for most of the project. Instead during development the contributors decided that end-to-end testing manually was the easiest. With that in mind you can still run some tests for verification on the backend:
 
 ```bash
+cd backend                  # with backend/.venv activated
 pip install -r requirements-dev.txt
 pytest                      # backend unit tests (tests/)
 ruff check .                # Python lint
 python scripts/selftest.py  # headless end-to-end check on synthetic scenes — must print ALL PASS
-                            #   (needs the card images: bash scripts/download_card_set.sh)
+                            #   (needs the card images — the installer downloads them)
 
-cd frontend
+cd ../frontend
 pnpm lint                   # frontend lint (ESLint)
 ```
 
@@ -410,6 +428,7 @@ self-test on every push.
   straightened-crop display and the confidence panel are built around the
   card lane. Figurine mode works in the backend, but the frontend experience
   is primarily made for cards rather than figurines.
+- **The Linux path has not been tested end to end.** None of the contributors has a Linux machine with a webcam. The Linux scripts pass syntax checks and shellcheck, the backend image builds, and the card download works in a Linux container, but a full install and run on a real Linux machine hasn't been tried.
 
 ## Roadmap
 
@@ -431,7 +450,7 @@ This project is not being actively maintained.
 **Data and APIs**
 
 - [TCGdex](https://tcgdex.dev): Pokémon TCG card data and reference images (Base Set).
-- [PokeAPI](https://pokeapi.co): Pokédex entries in `data/dex.json`.
+- [PokeAPI](https://pokeapi.co): Pokédex entries in `backend/data/dex.json`.
 - [PokeAPI sprites](https://github.com/PokeAPI/sprites): official artwork on the results screen.
 - [Pokédex dataset on Kaggle](https://www.kaggle.com/datasets/cristobalmitchell/pokedex?select=pokemon_utf8.csv): the Pokémon data seeded into MongoDB.
 
@@ -451,7 +470,7 @@ The source code and documentation are released under the [MIT License](LICENSE).
 Pokémon, Pokémon character names, artwork, card designs and Pokédex text are © Nintendo, Creatures Inc., GAME FREAK inc. and The Pokémon Company. This is a non-commercial educational project (COMPX374, University of Waikato) and is not affiliated with, endorsed or sponsored by those companies.
 
 - **Official artwork is not stored here.** Card images and official artwork are downloaded at setup or runtime from publicly available sources ([TCGdex](https://tcgdex.dev), the [PokeAPI sprites repository](https://github.com/PokeAPI/sprites)). The repo holds only perceptual hashes derived from them.
-- **Team-made reference data is excluded from MIT.** `Images/`, `Models/` and `data/figurines/exemplars/` contain the team's own photos and videos of physical cards and 3D-printed figurines, included only as test and reference data. `data/dex.json` contains Pokédex text retrieved from [PokeAPI](https://pokeapi.co). These depict or contain Pokémon IP and are not covered by the MIT licence.
+- **Team-made reference data is excluded from MIT.** `assets/card-photos/`, `assets/figurine-videos/` and `backend/data/figurines/exemplars/` contain the team's own photos and videos of physical cards and 3D-printed figurines, included only as test and reference data. `backend/data/dex.json` contains Pokédex text retrieved from [PokeAPI](https://pokeapi.co). These depict or contain Pokémon IP and are not covered by the MIT licence.
 - **Seeded database.** The Pokémon data seeded into MongoDB comes from an open source / public domain dataset: [Kaggle.com](https://www.kaggle.com/datasets/cristobalmitchell/pokedex?select=pokemon_utf8.csv).
 
 See [LICENSE](LICENSE) for the full third-party notice, including bundled libraries and other assets.

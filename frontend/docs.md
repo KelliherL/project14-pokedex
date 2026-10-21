@@ -87,7 +87,7 @@ Below are suggested actions based on my understanding of what needs to be done.
     - `type`, `frame`, `frameSize`, `phase` (and its possible values), `confidence`, `sigma`, `quad` (normalised 0–1, clockwise from top-left, or `null`), `dexId`.
     - Drop `colour`.
 - `dexId` is `null` for Trainer and Energy cards (empty `dex_ids`). The frontend needs to handle this.
-- Quad: changes needed to meet the [quad overlay contract](#quad-overlay-contract). Findings from reading `app/` on `main` (no server code exists on any branch yet):
+- Quad: changes needed to meet the [quad overlay contract](#quad-overlay-contract). Findings from reading `backend/app/` on `main` (no server code exists on any branch yet):
     - **Pixels, not 0–1.** `card_matcher.py` emits `quad.tolist()` in camera pixels. Divide `x` by `frame.shape[1]` and `y` by `frame.shape[0]` in the adapter.
     - **Out-of-frame quads.** `card_fallback.perturb` scales and shifts candidates; `best_crop` only rejects quads past `-0.25 × max(frame.shape)` on the low side and has no upper bound. `minAreaRect` corners can also fall outside the image. Clamp to 0–1 after normalising.
     - **Frozen quad when locked.** `lock_from` copies the explanation from the locking frame and `main.py` displays `locked` until 10 empty frames, so the quad stops following the card. Send the live frame's quad alongside the lock state.

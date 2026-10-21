@@ -8,7 +8,7 @@
 > there are graded and cited; this doc states them without repeating the
 > citations), with the headline numbers re-measured on our own hardware in
 > [the measured baselines](research/2026-08-07-measured-baselines.md). The
-> walking skeleton in `app/` implements this shape with the figurine path
+> walking skeleton in `backend/app/` implements this shape with the figurine path
 > stubbed.
 
 ## Core decision: two recognisers behind one interface
@@ -63,7 +63,7 @@ flowchart TD
 
 ### Figurine path (closed-set instance recognition)
 
-- **Primary, and now BUILT** (`app/recognisers/figurine_knn.py`): frozen
+- **Primary, and now BUILT** (`backend/app/recognisers/figurine_knn.py`): frozen
   **DINOv2 ViT-S/14 (with registers) → cosine kNN** over turntable captures
   of the actual event figurines. Background-plate crop; burst decision over
   10 frames; **margin** accept gate. Validated first on CORe50 (burst-of-10
@@ -131,43 +131,43 @@ Both seams are specified in [INTERFACES.md](INTERFACES.md) — read that before
 building against either.
 
 1. **Database seam** — the app reads dex data only through the
-   `DexDataSource` protocol (`app/dex_source.py`). The bundled
+   `DexDataSource` protocol (`backend/app/dex_source.py`). The bundled
    `JsonDexSource` is the reference implementation; the team database
    replaces it by implementing the same two methods. Nothing else in the app
    may touch storage.
-2. **Frontend seam** — the OpenCV window in `app/main.py` is a **dev
+2. **Frontend seam** — the OpenCV window in `backend/app/main.py` is a **dev
    harness**, not the event UI. Everything a real front-end needs arrives as
-   an `Identification` (`app/recognisers/base.py`); the harness shows the
+   an `Identification` (`backend/app/recognisers/base.py`); the harness shows the
    minimum honest rendering of it.
 
 ## Components
 
 | Component | Responsibility | Status |
 |---|---|---|
-| `app/recognisers/base.py` | `Identification` dataclass — the contract | real |
-| `app/recognisers/card_matcher.py` | detect → aspect-aware rectify → hash → NN match + shortlist | **real** (90° presentations recovered) |
-| `app/recognisers/voting.py` | 6-of-10 temporal vote over raw top-1s | **real** (locks 10/10 correct under synthetic harsh glare) |
-| `app/recognisers/verify.py` | ORB+RANSAC geometric verify of the voted winner at lock-on | **real** (accept gate = the match-lines data) |
-| `app/recognisers/figurine_stub.py` | closed-set classifier | **stub** (canned output, labelled STUB) |
-| `app/dex_source.py` | `DexDataSource` protocol + bundled JSON backend | real (JSON reference impl) |
-| `app/dex.py` | species → name/genus/flavor text, speech line | real (subset of PokeAPI data) |
-| `app/tts.py` | say the line | stub-grade (Windows built-in voice; Piper later) |
-| `app/overlay.py` | explanation panel drawn on the live feed | real for cards, placeholder for figurines |
-| `app/main.py` | capture loop, mode switch, identify/speak | real (dev harness — event UI is the frontend team's) |
-| `scripts/build_card_db.py` | hash a locally cached TCG set | real |
-| `scripts/download_card_set.sh` | cache one TCGdex set (JSON + images) | real |
-| `scripts/fetch_dex_data.py` | cache Pokédex entries for the DB's species | real |
-| `scripts/selftest.py` | headless end-to-end verification | real (runs in CI) |
-| `tests/` | unit tests (dex seam swappability) | real (runs in CI) |
+| `backend/app/recognisers/base.py` | `Identification` dataclass — the contract | real |
+| `backend/app/recognisers/card_matcher.py` | detect → aspect-aware rectify → hash → NN match + shortlist | **real** (90° presentations recovered) |
+| `backend/app/recognisers/voting.py` | 6-of-10 temporal vote over raw top-1s | **real** (locks 10/10 correct under synthetic harsh glare) |
+| `backend/app/recognisers/verify.py` | ORB+RANSAC geometric verify of the voted winner at lock-on | **real** (accept gate = the match-lines data) |
+| `backend/app/recognisers/figurine_stub.py` | closed-set classifier | **stub** (canned output, labelled STUB) |
+| `backend/app/dex_source.py` | `DexDataSource` protocol + bundled JSON backend | real (JSON reference impl) |
+| `backend/app/dex.py` | species → name/genus/flavor text, speech line | real (subset of PokeAPI data) |
+| `backend/app/tts.py` | say the line | stub-grade (Windows built-in voice; Piper later) |
+| `backend/app/overlay.py` | explanation panel drawn on the live feed | real for cards, placeholder for figurines |
+| `backend/app/main.py` | capture loop, mode switch, identify/speak | real (dev harness — event UI is the frontend team's) |
+| `backend/scripts/build_card_db.py` | hash a locally cached TCG set | real |
+| `backend/scripts/download_card_set.sh` | cache one TCGdex set (JSON + images) | real |
+| `backend/scripts/fetch_dex_data.py` | cache Pokédex entries for the DB's species | real |
+| `backend/scripts/selftest.py` | headless end-to-end verification | real (runs in CI) |
+| `backend/tests/` | unit tests (dex seam swappability) | real (runs in CI) |
 
 ## Data stores (all local, all built before event day)
 
 ```mermaid
 flowchart LR
     subgraph build ["Build time — before event day (network OK)"]
-        tcg["TCGdex API"] -->|"scripts/download_card_set.sh"| cache["data/cards/images + meta<br/>(local cache, never committed — TPC IP)"]
-        cache -->|"scripts/build_card_db.py"| hashes["data/cards/hashes.json<br/>(committed — derived, small)"]
-        papi["PokeAPI"] -->|"scripts/fetch_dex_data.py"| dexj["data/dex.json<br/>(committed — curated subset)"]
+        tcg["TCGdex API"] -->|"backend/scripts/download_card_set.sh"| cache["backend/data/cards/images + meta<br/>(local cache, never committed — TPC IP)"]
+        cache -->|"backend/scripts/build_card_db.py"| hashes["backend/data/cards/hashes.json<br/>(committed — derived, small)"]
+        papi["PokeAPI"] -->|"backend/scripts/fetch_dex_data.py"| dexj["backend/data/dex.json<br/>(committed — curated subset)"]
         piper["Piper TTS"] -.->|"batch render, later"| wavs["one WAV per species<br/>(hand-checked pronunciations)"]
     end
     subgraph event ["Event day — fully offline"]
@@ -177,10 +177,10 @@ flowchart LR
     end
 ```
 
-- **Card DB** — `data/cards/hashes.json` (+ cached reference images,
+- **Card DB** — `backend/data/cards/hashes.json` (+ cached reference images,
   gitignored): built from TCGdex/pokemontcg.io. *Time-sensitive:* bulk-cache
   early — pokemontcg.io is transitioning to commercial Scrydex.
-- **Dex data** — `data/dex.json`: curated English flavor texts from
+- **Dex data** — `backend/data/dex.json`: curated English flavor texts from
   PokeAPI's static dump, control characters stripped, kid-safe entries
   whitelisted (some canonical entries are genuinely grim — curation is a
   feature, and a client sign-off item). Served to the app through

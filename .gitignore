@@ -3,8 +3,8 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
-data/cards/*
-!data/cards/hashes.json
+backend/data/cards/*
+!backend/data/cards/hashes.json
 /.idea/
 .env
-scripts/net9.0/
+backend/scripts/net9.0/

@@ -1,20 +1,21 @@
 @echo off
 setlocal
 
-:: Pokedex launcher (Windows). Run install_windows.bat once first.
+:: Pokedex launcher (Windows). Run run\install_windows.bat once first.
 ::
 :: Starts the database and frontend containers, then the backend natively via
 :: backend_launch.bat in this window. Frontend: http://localhost:5173
 
-cd /d "%~dp0"
+:: this file lives in run\; work from the repo root
+cd /d "%~dp0.."
 
 if not exist .env (
-    echo [start] Not installed yet - run install_windows.bat first.
+    echo [start] Not installed yet - run run\install_windows.bat first.
     pause
     exit /b 1
 )
 
-call "%~dp0scripts\ensure_docker.bat" || (pause & exit /b 1)
+call "%~dp0ensure_docker.bat" || (pause & exit /b 1)
 
 echo [start] Starting the database and frontend...
 docker compose up -d

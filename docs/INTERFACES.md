@@ -21,7 +21,7 @@ flowchart LR
 
 ## Seam 1 — `DexDataSource` (database workstream)
 
-Defined in `app/dex_source.py`. The app never touches storage directly;
+Defined in `backend/app/dex_source.py`. The app never touches storage directly;
 everything reads through this protocol:
 
 ```python
@@ -53,7 +53,7 @@ class DexEntry:
   version, which language, kid-safe whitelisting) lives on the database side
   of the seam — the app speaks whatever it is given, verbatim. Must be plain
   text: no control characters, no embedded newlines, no soft hyphens
-  (PokeAPI raw text contains all three; see `scripts/fetch_dex_data.py`
+  (PokeAPI raw text contains all three; see `backend/scripts/fetch_dex_data.py`
   for the cleaning we currently do).
 
 ### Behavioural contract
@@ -72,25 +72,25 @@ class DexEntry:
 1. Implement the two methods (any class — no inheritance needed; it's a
    structural protocol).
 2. Construct the app's `Dex` with your source: `Dex(source=YourSource())`
-   in `app/main.py`.
-3. Prove it with the existing tests: `tests/test_dex.py` runs `Dex` against
+   in `backend/app/main.py`.
+3. Prove it with the existing tests: `backend/tests/test_dex.py` runs `Dex` against
    an in-memory `FakeSource` — your adapter should pass the same suite with
    the fake swapped for it.
 
-The bundled `JsonDexSource` (reads `data/dex.json`, 69 species) is the
+The bundled `JsonDexSource` (reads `backend/data/dex.json`, 69 species) is the
 reference implementation and stays as the offline fallback.
 
 ---
 
 ## Seam 2 — the frontend contract (UI/UX workstream)
 
-The OpenCV window in `app/main.py` is a **dev harness**, not the event UI.
+The OpenCV window in `backend/app/main.py` is a **dev harness**, not the event UI.
 It exists so the pipeline runs end to end today. The real UI replaces it and
 receives everything through one object.
 
 ### The `Identification` payload
 
-Defined in `app/recognisers/base.py`. Every recogniser (card matcher today,
+Defined in `backend/app/recognisers/base.py`. Every recogniser (card matcher today,
 figurine classifier later) returns this for every frame:
 
 | Field | Type | Meaning |
@@ -136,7 +136,7 @@ Figurine path (**real classifier as of 2026-09-15**; the stub still emits
 | Key | Type | Render as |
 |---|---|---|
 | `top5` | `[(name, similarity)×5]` | top-5 confidence bars. Note these are **cosine similarities, not probabilities** — they do not sum to 1, and the gap between the top two is what matters |
-| `exemplars` | `[{label, image, similarity}×3]` | the exemplar strip: the actual nearest reference frames the decision was made from. `image` is a path relative to `data/figurines/` |
+| `exemplars` | `[{label, image, similarity}×3]` | the exemplar strip: the actual nearest reference frames the decision was made from. `image` is a path relative to `backend/data/figurines/` |
 | `best_label` | `str` | reference class, e.g. `"Jolteon-A"`. Internal identity — **do not show this to visitors**, show `label` |
 | `best_answer` | `str` | what the visitor would be told, e.g. `"Jolteon"`, **regardless of whether this single frame cleared the gate**. Two prints of one species share an answer |
 | `best_dex_id` | `int \| None` | dex id for `best_answer`, same caveat |

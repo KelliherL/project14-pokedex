@@ -1,6 +1,6 @@
 """Fail if a commit adds large binaries to the repository.
 
-Images/ and Models/ added ~437 MB of capture assets that every clone now
+assets/card-photos/ and assets/figurine-videos/ added ~437 MB of capture assets that every clone now
 pays for, permanently. Rewriting that history would cost the whole team a
 re-clone for no functional gain, so it stays — and this check exists so it
 does not happen twice.
@@ -9,8 +9,10 @@ Capture assets belong in a shared drive with a link in the docs. Derived
 artifacts (extracted frames, embedding caches) belong in a scratch directory.
 The small committed artifacts the app needs at runtime are allowlisted below.
 
-  python scripts/check_repo_weight.py            # working tree vs origin/main
-  python scripts/check_repo_weight.py --all      # everything tracked
+Run from the repo root (git ls-files only lists files below the current folder):
+
+  python backend/scripts/check_repo_weight.py            # working tree vs origin/main
+  python backend/scripts/check_repo_weight.py --all      # everything tracked
 """
 
 import argparse
@@ -20,12 +22,13 @@ from pathlib import Path
 
 MAX_FILE_BYTES = 2 * 1024 * 1024        # 2 MB
 ALLOWED_PREFIXES = (
-    "data/figurines/",                   # index + exemplar thumbnails, ~1.4 MB total
-    "data/cards/hashes.json",
-    "data/dex.json",
+    "backend/data/figurines/",           # index + exemplar thumbnails, ~1.4 MB total
+    "backend/data/cards/hashes.json",
+    "backend/data/dex.json",
+    "backend/scripts/pokedb-setup.zip",  # the DB seeder (ProcessPokeData), ~4.9 MB
 )
 # Paths that predate the rule. Documented exemptions, not a licence to grow.
-GRANDFATHERED = ("Images/", "Models/")
+GRANDFATHERED = ("assets/card-photos/", "assets/figurine-videos/")
 
 
 def tracked_files(all_files: bool) -> list[str]:

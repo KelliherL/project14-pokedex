@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Pokedex launcher (Linux). Run ./install_linux.sh once first.
+# Pokedex launcher (Linux). Run ./run/install_linux.sh once first.
 #
 # Starts mongo, the frontend and the backend (webcam passed through) as three
 # containers. Frontend: http://localhost:5173  Backend: :8000
 #
-#   ./start_linux.sh          ask for mode + camera, then start (Ctrl+C stops)
-#   ./start_linux.sh down     stop and remove the containers (DB data is kept)
-#   ./start_linux.sh logs     follow logs
+#   ./run/start_linux.sh          ask for mode + camera, then start (Ctrl+C stops)
+#   ./run/start_linux.sh down     stop and remove the containers (DB data is kept)
+#   ./run/start_linux.sh logs     follow logs
 
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."  # this file lives in run/; work from the repo root
 
 if [ ! -f .env ]; then
-  echo "[start] No .env found - run ./install_linux.sh first."
+  echo "[start] No .env found - run ./run/install_linux.sh first."
   exit 1
 fi
 

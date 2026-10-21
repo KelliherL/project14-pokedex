@@ -7,11 +7,14 @@ import asyncio
 import json
 import os
 from pathlib import Path
-from app.capture import CaptureWorker
+
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError
+
+from app.capture import CaptureWorker
 
 ALLOWED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
 BOUNDARY = "frame"
@@ -22,7 +25,7 @@ POLL_SECONDS = 0.01
 # Optional so venvs made before python-dotenv was added keep working.
 try:
     from dotenv import load_dotenv
-    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env")  # repo root, above backend/
 except ImportError:
     pass
 MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017/")
@@ -30,7 +33,7 @@ MONGO_URL = os.environ.get("MONGO_URL", "mongodb://localhost:27017/")
 try:
     client = MongoClient(MONGO_URL)
     database = client.get_database("PokeVision")
-except Exception as e:
+except PyMongoError as e:
     print("An error occurred when connecting to the database")
     print(e)
 
@@ -40,7 +43,7 @@ def pokemonbyid(id: int):
         # the document itself (None if there's no such id); FastAPI turns it into JSON. Returning
         # json.dumps(...) here made the endpoint send a JSON string inside JSON
         return collection.find_one({"_id": id})
-    except Exception as e:
+    except PyMongoError as e:
         print(e)
         return 0
 

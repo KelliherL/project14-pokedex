@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Pokedex installer (Linux). Run once, then ./start_linux.sh.
+# Pokedex installer (Linux). Run once, then ./run/start_linux.sh.
 #
 # Makes sure Docker is installed (asks first), creates .env, downloads the
 # card reference images and figurine model weights, builds the images and
 # seeds the database. Safe to re-run: finished steps are skipped.
 
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."  # this file lives in run/; work from the repo root
 
 say() { echo "[install] $*"; }
 
@@ -69,4 +69,4 @@ compose --profile seed run --rm seed
 compose stop mongo
 
 echo
-say "Done. Start the Pokedex with: ./start_linux.sh"
+say "Done. Start the Pokedex with: ./run/start_linux.sh"

@@ -11,7 +11,8 @@ setlocal
 :: The backend reports back through its exit code (app/capture.py EXIT_*):
 ::   0 = q (quit launcher)   3 = r (back to this menu)   9 = x (force shutdown)
 
-cd /d "%~dp0"
+:: this file lives in run\; the backend (and its .venv) live in backend\
+cd /d "%~dp0..\backend"
 
 set VENV_DIR=.venv
 

@@ -7,6 +7,10 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    # the Python side lives in backend/; steps that need the repo root override this
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
 
@@ -27,8 +31,10 @@ jobs:
 
       - run: ruff check .
 
+      # from the repo root: git ls-files only lists files below the current folder
       - name: Repo weight guard
-        run: python scripts/check_repo_weight.py --all
+        working-directory: .
+        run: python backend/scripts/check_repo_weight.py --all
 
       - run: pytest
 
@@ -40,12 +46,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            data/cards/images
-            data/cards/meta
-            data/cards/set.json
-            data/cards/ids.txt
-            data/cards/urls.txt
-          key: tcgdex-base1-v1
+            backend/data/cards/images
+            backend/data/cards/meta
+            backend/data/cards/set.json
+            backend/data/cards/ids.txt
+            backend/data/cards/urls.txt
+          key: tcgdex-base1-v2
 
       - name: Download card set on cold cache
         run: |

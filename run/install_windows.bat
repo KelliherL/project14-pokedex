@@ -1,16 +1,17 @@
 @echo off
 setlocal
 
-:: Pokedex installer (Windows). Run once, then start_windows.bat.
+:: Pokedex installer (Windows). Run once, then run\start_windows.bat.
 ::
 :: Windows runs the database and frontend in Docker and the backend natively
 :: (Docker Desktop can't pass a webcam through to a container). This script
 :: makes sure WSL, Docker Desktop and Python are installed (asking before
-:: installing anything), sets up the backend's .venv, downloads the card
+:: installing anything), sets up backend\.venv, downloads the card
 :: images and figurine model weights, builds the images and seeds the
 :: database. Safe to re-run: finished steps are skipped.
 
-cd /d "%~dp0"
+:: this file lives in run\; work from the repo root
+cd /d "%~dp0.."
 set NEED_RESTART=
 
 :: ---------------------------------------------------------------- WSL
@@ -59,7 +60,7 @@ if errorlevel 1 (
 :: this console still has the old PATH
 if not defined NEED_RESTART (
     echo.
-    echo [install] Python installed. Close this window, open a new one and run install_windows.bat again.
+    echo [install] Python installed. Close this window, open a new one and run run\install_windows.bat again.
     goto :done
 )
 :python_ok
@@ -67,7 +68,7 @@ if not defined NEED_RESTART (
 if defined NEED_RESTART (
     echo.
     echo [install] Restart Windows to finish installing WSL / Docker Desktop,
-    echo [install] then run install_windows.bat again.
+    echo [install] then run run\install_windows.bat again.
     goto :done
 )
 
@@ -78,26 +79,26 @@ if not exist .env (
 )
 
 :: ---------------------------------------------------------------- Backend venv
-if not exist ".venv\Scripts\python.exe" (
+if not exist "backend\.venv\Scripts\python.exe" (
     echo [install] Creating the backend's Python environment...
-    %PY% -m venv .venv || goto :fail
+    %PY% -m venv backend\.venv || goto :fail
 )
 echo [install] Installing backend packages (the first time downloads ~1 GB)...
-.venv\Scripts\python -m pip install --upgrade pip >nul
-.venv\Scripts\python -m pip install -r requirements.txt
+backend\.venv\Scripts\python -m pip install --upgrade pip >nul
+backend\.venv\Scripts\python -m pip install -r backend\requirements.txt
 if errorlevel 1 (
     echo [install] Installing the backend packages failed.
     goto :fail
 )
 echo [install] Downloading figurine model weights...
-.venv\Scripts\python -c "import torch; torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14_reg', verbose=False); print('DINOv2 weights cached')"
+backend\.venv\Scripts\python -c "import torch; torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14_reg', verbose=False); print('DINOv2 weights cached')"
 if errorlevel 1 (
     echo [install] Downloading the figurine model weights failed.
     goto :fail
 )
 
 :: ---------------------------------------------------------------- Docker side
-call "%~dp0scripts\ensure_docker.bat" || goto :fail
+call "%~dp0ensure_docker.bat" || goto :fail
 
 echo [install] Downloading card reference images...
 docker compose --profile setup run --rm cards || goto :compose_fail
@@ -110,7 +111,7 @@ docker compose --profile seed run --rm seed || goto :compose_fail
 docker compose stop mongo >nul 2>&1
 
 echo.
-echo [install] Done. Start the Pokedex with: start_windows.bat
+echo [install] Done. Start the Pokedex with: run\start_windows.bat
 goto :done
 
 :: ---------------------------------------------------------------- helpers

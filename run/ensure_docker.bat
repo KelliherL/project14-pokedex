@@ -6,7 +6,7 @@ docker info >nul 2>&1 && exit /b 0
 
 set "DD_EXE=%ProgramFiles%\Docker\Docker\Docker Desktop.exe"
 if not exist "%DD_EXE%" (
-    echo [docker] Docker Desktop isn't installed - run install_windows.bat first.
+    echo [docker] Docker Desktop isn't installed - run run\install_windows.bat first.
     exit /b 1
 )
 

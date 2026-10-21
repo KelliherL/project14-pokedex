@@ -8,7 +8,7 @@ data/figurines/sources.json and re-running this.
 
 Two input shapes, both reproducible from what is in the repo:
 
-  video  — a turntable clip per figurine (Models/*.mov). The camera is static
+  video  — a turntable clip per figurine (assets/figurine-videos/*.mov). The camera is static
            and only the figurine moves, so a per-pixel temporal median of the
            clip is a background plate; subtracting it isolates the figurine
            and gives a tight crop for free.
@@ -33,6 +33,8 @@ import cv2
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
+# sources.json paths (assets/figurine-videos/...) are relative to the repo root
+REPO_ROOT = ROOT.parent
 sys.path.insert(0, str(ROOT))
 
 from app.recognisers.figurine_knn import (
@@ -120,7 +122,7 @@ def main() -> int:
 
     for entry in sources:
         label = entry["label"]
-        src = ROOT / entry["source"]
+        src = REPO_ROOT / entry["source"]
         if not src.exists():
             print(f"  {label:<14} SKIP — {entry['source']} not found")
             continue

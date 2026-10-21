@@ -1,6 +1,6 @@
 """List the cameras the OS exposes, numbered by the index `--camera` expects.
 
-Used by backend_launch.bat to show a camera menu. On Windows the backend opens
+Used by run/backend_launch.bat to show a camera menu. On Windows the backend opens
 cameras through DirectShow (cv2.CAP_DSHOW), so the names come from the same
 DirectShow enumeration (via pygrabber) and the printed index is exactly the
 one cv2 will open. Without pygrabber (or off Windows) it falls back to probing
@@ -27,7 +27,8 @@ def directshow_names() -> list[str] | None:
         return None
     try:
         return FilterGraph().get_input_devices()
-    except Exception:  # COM failures shouldn't kill the launcher
+    # COM failures shouldn't kill the launcher; comtypes raises its own error types
+    except Exception:  # noqa: BLE001
         return None
 
 

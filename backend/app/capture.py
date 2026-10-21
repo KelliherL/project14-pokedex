@@ -41,7 +41,7 @@ PLATE_FRAMES = 12
 
 STREAM_JPEG_QUALITY = 80
 
-# Process exit codes backend_launch.bat branches on: quit ends the launcher,
+# Process exit codes run\backend_launch.bat branches on: quit ends the launcher,
 # restart returns to its menu, force skips all cleanup and ends the launcher.
 EXIT_QUIT = 0
 EXIT_RESTART = 3

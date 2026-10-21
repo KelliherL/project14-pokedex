@@ -239,13 +239,13 @@ general-purpose AI models do it, so nobody leaves thinking the belt is literally
 
 Material to draw from, as of October 2026:
 
-- **Our card lane** (`app/recognisers/card_matcher.py`): no neural network. It finds the card's
+- **Our card lane** (`backend/app/recognisers/card_matcher.py`): no neural network. It finds the card's
   outline, flattens it to a straight-on 245×337 image, turns it greyscale, and makes a 64-bit
   fingerprint of it two ways (pHash: coarse frequency pattern; dHash: is each pixel brighter than
   its neighbour). It then counts how many bits differ from every card in the database and picks
   the closest, accepted only if it's close enough and clearly ahead of the next card. Several
   frames vote, and a final SIFT keypoint check confirms the match.
-- **Our figurine lane** (`app/recognisers/figurine_knn.py`): a frozen DINOv2 vision transformer,
+- **Our figurine lane** (`backend/app/recognisers/figurine_knn.py`): a frozen DINOv2 vision transformer,
   never trained on Pokémon, turns the cropped photo into 384 numbers. Those are compared against
   stored reference photos of the actual event figurines, and the nearest match wins. Adding a
   figurine means adding photos, not retraining.

@@ -4,69 +4,69 @@
   "dex_id": 1,
   "exemplar": "exemplars/Bulbasaur_00.jpg",
   "references": 24,
-  "source": "Models/Bulbasaur Model.mov"
+  "source": "assets/figurine-videos/Bulbasaur Model.mov"
  },
  "Eevee": {
   "display": "Eevee",
   "dex_id": 133,
   "exemplar": "exemplars/Eevee_00.jpg",
   "references": 24,
-  "source": "Models/Eevee Model.mov"
+  "source": "assets/figurine-videos/Eevee Model.mov"
  },
  "Flareon": {
   "display": "Flareon",
   "dex_id": 136,
   "exemplar": "exemplars/Flareon_00.jpg",
   "references": 24,
-  "source": "Models/Flareon Model.mov"
+  "source": "assets/figurine-videos/Flareon Model.mov"
  },
  "Jolteon-A": {
   "display": "Jolteon",
   "dex_id": 135,
   "exemplar": "exemplars/Jolteon-A_00.jpg",
   "references": 24,
-  "source": "Models/Jolteon Model.mov"
+  "source": "assets/figurine-videos/Jolteon Model.mov"
  },
  "Jolteon-B": {
   "display": "Jolteon",
   "dex_id": 135,
   "exemplar": "exemplars/Jolteon-B_00.jpg",
   "references": 24,
-  "source": "Models/Jolteon 2 Model.mov"
+  "source": "assets/figurine-videos/Jolteon 2 Model.mov"
  },
  "Mewtwo": {
   "display": "Mewtwo",
   "dex_id": 150,
   "exemplar": "exemplars/Mewtwo_00.jpg",
   "references": 24,
-  "source": "Models/Mewtwo Model.mov"
+  "source": "assets/figurine-videos/Mewtwo Model.mov"
  },
  "Pikachu": {
   "display": "Pikachu",
   "dex_id": 25,
   "exemplar": "exemplars/Pikachu_00.jpg",
   "references": 24,
-  "source": "Models/Pikachu Model.mov"
+  "source": "assets/figurine-videos/Pikachu Model.mov"
  },
  "Sprigatito": {
   "display": "Sprigatito",
   "dex_id": 906,
   "exemplar": "exemplars/Sprigatito_00.jpg",
   "references": 24,
-  "source": "Models/Sprigatito Model.mov"
+  "source": "assets/figurine-videos/Sprigatito Model.mov"
  },
  "Vaporeon": {
   "display": "Vaporeon",
   "dex_id": 134,
   "exemplar": "exemplars/Vaporeon_00.jpg",
   "references": 24,
-  "source": "Models/Vaporeon Model.mov"
+  "source": "assets/figurine-videos/Vaporeon Model.mov"
  },
  "Vulpix": {
   "display": "Vulpix",
   "dex_id": 37,
   "exemplar": "exemplars/Vulpix_00.jpg",
   "references": 24,
-  "source": "Models/Vulpix Model.mov"
+  "source": "assets/figurine-videos/Vulpix Model.mov"
  }
 }

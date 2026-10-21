@@ -35,27 +35,27 @@ Pokémon intellectual property
   - Official card images and artwork are NOT stored in this repository. They
     are downloaded at setup or runtime from publicly available sources
     (TCGdex, the PokeAPI sprites repository).
-  - data/cards/hashes.json holds only perceptual hashes (numbers) derived from
+  - backend/data/cards/hashes.json holds only perceptual hashes (numbers) derived from
     those images, not the images themselves.
-  - Images/, Models/ and data/figurines/exemplars/ hold the team's own
+  - assets/card-photos/, assets/figurine-videos/ and backend/data/figurines/exemplars/ hold the team's own
     photographs and videos of physical cards and 3D-printed figurines,
     included solely as test and reference data for non-commercial educational
     use. They depict Pokémon IP and are not licensed under MIT.
-  - data/dex.json contains Pokédex entry text retrieved from PokeAPI
+  - backend/data/dex.json contains Pokédex entry text retrieved from PokeAPI
     (https://pokeapi.co); the text itself remains © its owners above.
 
 Seeded database
   The Pokémon data seeded into MongoDB (pokemon_utf8.csv inside
-  scripts/pokedb-setup.zip) comes from an open source / public domain dataset:
+  backend/scripts/pokedb-setup.zip) comes from an open source / public domain dataset:
   [DATASET NAME AND LINK — TODO].
 
 Bundled third-party software
-  scripts/pokedb-setup.zip also bundles third-party libraries (MongoDB .NET
+  backend/scripts/pokedb-setup.zip also bundles third-party libraries (MongoDB .NET
   driver, DnsClient, Microsoft.Extensions.Logging.Abstractions,
   Oracle.ManagedDataAccess) that remain under their own licences.
 
 Other assets
-  frontend/src/background.jpg, frontend/src/piqsels.com-id-jfhts.jpg and
-  frontend/src/assets/table texture.jpg: [SOURCE AND LICENCE — TODO].
+  frontend/src/background.jpg and
+  frontend/src/assets/TableTexture.jpg: [SOURCE AND LICENCE — TODO].
 
 If you are a rights holder and want material removed, please open an issue.
