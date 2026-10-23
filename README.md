@@ -4,7 +4,7 @@
 > A program designed to act as a kiosk for an event to teach computer vision.
 
 <!-- Hero image or GIF of the kiosk in action. Recommended width ~800px. -->
-![Pokédex kiosk in action](docs/images/kiosk-hero.png)
+![Pokédex kiosk in action](docs/images/demo.gif)
 
 <!-- Optional badges: build status, licence, Python/Node versions. -->
 <!-- ![CI](TODO) ![Python](https://img.shields.io/badge/python-3.11+-blue) -->
@@ -75,7 +75,7 @@
 <!-- Put images in docs/images/ and reference them relatively. Captions help. -->
 | Scanning | Recognition | Results |
 |:---:|:---:|:---:|
-| ![Scanning](docs/images/scan-preview.png) | ![Recognition](docs/images/recognition-preview.png) | ![Results](docs/images/results-preview.png) |
+| ![Scanning](docs/images/searching.png) | ![Recognition](docs/images/pokemon_vision_dashboard.png) | ![Results](docs/images/results.png) |
 | _A visitor holding a card in front of the camera to begin detection._ | _The recogniser locks onto the card and ranks the likely matches._ | _The final Pokédex card displays the result, stats a[...]
 
 <!-- Optional: a short demo video or GIF -->
