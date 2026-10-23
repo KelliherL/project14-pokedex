@@ -42,18 +42,18 @@
 
 <!-- Context: why the project exists, the client, the course (COMPX374), the audience. -->
 
-- **The goal:** This piece of software was designed for Waikato University's Nerdfest event as part of paper credit for COMPX374 (Software Engineering Industry Project). It was designed to fulfil the needs of a public-facing demonstrator that teaches computer vision in a memorable and playful way.
-- **The client and audience:** This was developed for a client in SCMS at the University of Waikato. The main audience of this software is people who are new to computer vision and want to see how a model can recognise real-world objects from camera input.
-- **What a visitor experiences:** The intended flow of this experience is to have a visitor hold a card or figurine up to the camera, let the system identify it, and then explore the results through a polished Pokédex-style interface that explains what it recognised and how it came to that conclusion.
+- **The goal:** This piece of software was designed for Waikato University's Nerdfest event as part of paper credit for COMPX374 (Software Engineering Industry Project). It was designed to fulfil [...]
+- **The client and audience:** This was developed for a client in SCMS at the University of Waikato. The main audience of this software is people who are new to computer vision and want to see how[...]
+- **What a visitor experiences:** The intended flow of this experience is to have a visitor hold a card or figurine up to the camera, let the system identify it, and then explore the results throu[...]
 
 ## Features
 
 ### **For visitors**
 
-- **Card recognition.** Hold a Pokémon card up to the camera. The Pokédex finds the card, straightens it out, and matches it against the Base Set (cached from TCGdex). It only commits to an answer once the evidence is strong.
+- **Card recognition.** Hold a Pokémon card up to the camera. The Pokédex finds the card, straightens it out, and matches it against the Base Set (cached from TCGdex). It only commits to an answ[...]
 - **Figurine recognition.** Recognises ten 3D-printed figurines (nine species) from turntable reference captures, and rejects anything it hasn't seen rather than guessing.
 - **Pokédex-style device UI.** The live camera feed plays inside a Pokédex shell, with its Capture and History buttons.
-- **"How it knew" animation.** Pressing Capture zooms into the screen and plays an animated walkthrough of how an image classifier reaches its answer, with captions for each step. It ends on the back-end dex card for the matched Pokémon.
+- **"How it knew" animation.** Pressing Capture zooms into the screen and plays an animated walkthrough of how an image classifier reaches its answer, with captions for each step. It ends on the b[...]
 - **Confidence panel.** Shows the straightened card next to the top five matches, each with a confidence bar.
 - **Results screen.** Official artwork plus the dex entry: name, colour-coded type pills, classification, generation, height and weight, base stats, gender split and description.
 - **Honest "unsure" screen.** When confidence is low, it gives a tip (better lighting, fill more of the frame) instead of a wrong answer.
@@ -66,7 +66,7 @@
 - **Console controls.** Keys to restart, clear the console, quit, or force a shutdown while the backend runs.
 - **Dev harness.** An OpenCV debug window that draws the recognition pipeline's working over the frame, with no server or frontend needed.
 - **Pluggable data seams.** Dex data sits behind a database-agnostic interface (MongoDB in deployment, bundled JSON otherwise).
-- **One-step install on Windows and Linux.** An install script per OS checks for and offers to install everything needed (WSL, Docker Desktop and Python on Windows; Docker on Linux), downloads the required reference data, and starts the project with minimal setup.
+- **One-step install on Windows and Linux.** An install script per OS checks for and offers to install everything needed (WSL, Docker Desktop and Python on Windows; Docker on Linux), downloads the[...]
 - **Mostly offline.** Recognition, speech and dex data all run locally. The only exception is the results-screen artwork, which currently loads from the PokeAPI sprites repo.
 - **Tested.** Unit tests plus a headless end-to-end self-test (`backend/scripts/selftest.py`) that runs in CI.
 
@@ -76,14 +76,14 @@
 | Scanning | Recognition | Results |
 |:---:|:---:|:---:|
 | ![Scanning](docs/images/scan-preview.png) | ![Recognition](docs/images/recognition-preview.png) | ![Results](docs/images/results-preview.png) |
-| _A visitor holding a card in front of the camera to begin detection._ | _The recogniser locks onto the card and ranks the likely matches._ | _The final Pokédex card displays the result, stats and artwork._ |
+| _A visitor holding a card in front of the camera to begin detection._ | _The recogniser locks onto the card and ranks the likely matches._ | _The final Pokédex card displays the result, stats a[...]
 
 <!-- Optional: a short demo video or GIF -->
 <!-- [▶ Watch the demo](TODO-link) -->
 
 ## How it works
 
-The project combines lightweight computer-vision detection, a voting system across multiple frames, and a polished kiosk UI. A card or figurine is captured from the webcam, processed through the matching pipeline, and then shown to the visitor as a results screen with context, confidence and explanations.
+The project combines lightweight computer-vision detection, a voting system across multiple frames, and a polished kiosk UI. A card or figurine is captured from the webcam, processed through the m[...]
 
 <!-- Architecture diagram (image or Mermaid). -->
 ```mermaid
@@ -256,7 +256,7 @@ installs `backend\requirements.txt` into it, so `run\backend_launch.bat` is read
 **Windows:** `run\start_windows.bat` opens `run\backend_launch.bat` for you, and you
 can also run it on its own while the containers are up.
 
-When `run\backend_launch.bat` is run it will ask for what mode you want to run it in as well as the camera you want to use. The UI for this bat script also contains some other useful options like restart, clear console, and shutdown controls.
+When `run\backend_launch.bat` is run it will ask for what mode you want to run it in as well as the camera you want to use. The UI for this bat script also contains some other useful options like[...]
 
 **Manual** (from the repo root):
 
@@ -291,7 +291,7 @@ After frontend changes, rebuild the container with
 `docker compose build frontend`. The frontend expects the backend at
 `http://localhost:8000` (`frontend/src/App.jsx`).
 
-Alternatively use your IDE of choice and use the `package.json` dev script to run it in hot reload mode. It can still connect to the backend and database docker containers while running in this mode.
+Alternatively use your IDE of choice and use the `package.json` dev script to run it in hot reload mode. It can still connect to the backend and database docker containers while running in this m[...]
 
 ### Adding cards and figurines
 
@@ -349,7 +349,7 @@ it when run natively. The defaults work as-is; change them only for a clash
 | Setting | Where | Default | Description |
 |---|---|---|---|
 | `MONGO_PORT` | `.env` | `27017` | Port on your machine where the MongoDB container is published. Change it if another MongoDB already uses 27017. |
-| `MONGO_URL` | `.env` | `mongodb://localhost:${MONGO_PORT}/` | Where the **native** backend (Windows) finds MongoDB. Follows `MONGO_PORT` automatically. The Linux backend container ignores it and uses the container DNS name instead. |
+| `MONGO_URL` | `.env` | `mongodb://localhost:${MONGO_PORT}/` | Where the **native** backend (Windows) finds MongoDB. Follows `MONGO_PORT` automatically. The Linux backend container ignores it an[...]
 | `MODE` | `.env` | `card` | Recognition mode for the **Linux** backend container: `card` or `figurine`. `run/start_linux.sh` asks, using this as the default. |
 | `CAMERA_DEVICE` | `.env` | `/dev/video0` | Webcam passed into the **Linux** backend container. `run/start_linux.sh` asks, using this as the default. |
 
@@ -390,11 +390,11 @@ project14-pokedex/
 │   ├── card-photos/       #   photos of real cards, normal and glare, EN and JP (test data)
 │   └── figurine-videos/   #   turntable videos of the 3D-printed figurines (figurine index source)
 └── docs/                  # Design and architecture docs, research notes, the standalone
-                           #   recognition explainer (HTML) and the previous README
+                            #   recognition explainer (HTML) and the previous README
 ```
 
 ## Testing
-Tests have not been considered for most of the project. Instead during development the contributors decided that end-to-end testing manually was the easiest. With that in mind you can still run some tests locally:
+Tests have not been considered for most of the project. Instead during development the contributors decided that end-to-end testing manually was the easiest. With that in mind you can still run s[...]
 
 ```bash
 cd backend                  # with backend/.venv activated
@@ -427,7 +427,7 @@ self-test on every push.
   straightened-crop display and the confidence panel are built around the
   card lane. Figurine mode works in the backend, but the frontend experience
   is primarily made for cards rather than figurines.
-- **The Linux path has not been tested end to end.** None of the contributors has a Linux machine with a webcam. The Linux scripts pass syntax checks and shellcheck, the backend image builds, and the project is in a reasonable working state, but the full hardware path has not been verified on Linux.
+- **The Linux path has not been tested end to end.** None of the contributors has a Linux machine with a webcam. The Linux scripts pass syntax checks and shellcheck, the backend image builds, and[...]
 
 ## Roadmap
 
@@ -462,14 +462,14 @@ This project is not being actively maintained.
 
 ## Licence
 
-The source code and documentation are released under the [MIT License](LICENSE). You're free to use, modify and redistribute them, as long as you keep the copyright notice.
+The source code and documentation are released under the [GNU General Public License v3.0](LICENSE). This project is free software: you can redistribute it and/or modify it under the terms of the GPL-3.0 license.
 
 **Pokémon disclaimer**
 
-Pokémon, Pokémon character names, artwork, card designs and Pokédex text are © Nintendo, Creatures Inc., GAME FREAK inc. and The Pokémon Company. This is a non-commercial educational project for Waikato University COMPX374.
+Pokémon, Pokémon character names, artwork, card designs and Pokédex text are © Nintendo, Creatures Inc., GAME FREAK inc. and The Pokémon Company. This is a non-commercial educational project developed for COMPX374 at the University of Waikato and is not affiliated with, endorsed or sponsored by those companies.
 
-- **Official artwork is not stored here.** Card images and official artwork are downloaded at setup or runtime from publicly available sources ([TCGdex](https://tcgdex.dev), the [PokeAPI sprites repo](https://github.com/PokeAPI/sprites)).
-- **Team-made reference data is excluded from MIT.** `assets/card-photos/`, `assets/figurine-videos/` and `backend/data/figurines/exemplars/` contain the team's own photos and videos of physical cards and figurines.
+- **Official artwork is not stored here.** Card images and official artwork are downloaded at setup or runtime from publicly available sources ([TCGdex](https://tcgdex.dev), the [PokeAPI sprites repository](https://github.com/PokeAPI/sprites)).
+- **Team-made reference data is excluded from the GPL.** `assets/card-photos/`, `assets/figurine-videos/` and `backend/data/figurines/exemplars/` contain the team's own photos and videos of physical cards and figurines, which are included solely for non-commercial educational use.
 - **Seeded database.** The Pokémon data seeded into MongoDB comes from an open source / public domain dataset: [Kaggle.com](https://www.kaggle.com/datasets/cristobalmitchell/pokedex?select=pokemon_utf8.csv).
 
-See [LICENSE](LICENSE) for the full third-party notice, including bundled libraries and other assets.
+See [LICENSE](LICENSE) for the full GPL-3.0 terms and the project-specific notices for assets and third-party content.
