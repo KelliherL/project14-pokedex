@@ -23,7 +23,7 @@ from app.recognisers.card_matcher import CardMatcher
 from app.recognisers.figurine_knn import FigurineClassifier
 from app.recognisers.figurine_stub import FigurineClassifierStub
 from app.recognisers.verify import CardVerifier
-from app.recognisers.voting import BurstGate, FrameScore, VoteBuffer
+from app.recognisers.voting import BurstGate, DistanceAverager, FrameScore, VoteBuffer
 from app.tts import speak
 
 UNLOCK_AFTER_EMPTY_FRAMES = 10
@@ -159,6 +159,7 @@ class CaptureWorker:
         self.mute = mute
         self._on_exit = on_exit
         self._votes = VoteBuffer()
+        self._avg = DistanceAverager()
         self._burst = BurstGate()
         self._locked: Identification | None = None
         self._live: Identification | None = None
@@ -244,6 +245,7 @@ class CaptureWorker:
             self._empty_streak += 1
             if self._empty_streak >= UNLOCK_AFTER_EMPTY_FRAMES:
                 self._votes.reset()
+                self._avg.reset()
                 self._locked = None
             return
 
@@ -251,7 +253,8 @@ class CaptureWorker:
         if self._locked is not None:
             return
 
-        winner = self._votes.add(live.explanation.get("best_card"))
+        db = self.recognisers["card"].db
+        winner = self._votes.add(db[self._avg.add(live.explanation["distances"])]["id"])
         if not winner:
             return
         locked = lock_from(live, self.recognisers["card"], self.verifier, winner)
@@ -314,6 +317,7 @@ class CaptureWorker:
     def switch_mode(self) -> None:
         self.mode = "figurine" if self.mode == "card" else "card"
         self._votes.reset()
+        self._avg.reset()
         self._burst.reset()
         self._locked = None
         self._hard_streak = 0
