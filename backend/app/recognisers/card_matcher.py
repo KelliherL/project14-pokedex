@@ -276,7 +276,6 @@ class CardMatcher:
             explanation={
                 "quad": np.asarray(quad).tolist(),
                 "rectified": warped,
-                "distances": dists,  # per-DB-row, for cross-frame averaging (voting.DistanceAverager)
                 "best_card": e["id"],
                 "best_distance": int(dists[best]),
                 "second_card": self.db[second]["id"],

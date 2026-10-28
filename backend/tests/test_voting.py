@@ -41,13 +41,3 @@ def test_reset_clears_votes():
     for _ in range(5):
         assert v.add("base1-4") is None
     assert v.add("base1-4") == "base1-4"
-
-
-def test_averager_outvotes_single_noisy_frame():
-    from app.recognisers.voting import DistanceAverager
-    a = DistanceAverager(window=8)
-    for _ in range(4):
-        assert a.add([10, 40, 40]) == 0
-    assert a.add([40, 5, 40]) == 0  # one glare frame puts row 1 on top; average holds row 0
-    a.reset()
-    assert a.add([40, 5, 40]) == 1

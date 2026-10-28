@@ -12,8 +12,6 @@ The accept decision belongs to the verify stage, not to the vote.
 from collections import Counter, deque
 from dataclasses import dataclass
 
-import numpy as np
-
 
 class VoteBuffer:
     def __init__(self, window: int = 10, need: int = 6):
@@ -34,25 +32,6 @@ class VoteBuffer:
 
     def reset(self) -> None:
         self._votes.clear()
-
-
-class DistanceAverager:
-    """Average each card's hash distance over recent frames; the vote then
-    takes the argmin of the average instead of one frame's top-1.
-
-    One glare, blur or junk-quad frame can put any card on top, but it only
-    nudges a running average, so the true card keeps winning the vote."""
-
-    def __init__(self, window: int = 8):
-        self._frames: deque[np.ndarray] = deque(maxlen=window)
-
-    def add(self, distances: np.ndarray) -> int:
-        """Record one frame's per-card distances; return the averaged best row."""
-        self._frames.append(np.asarray(distances, dtype=np.float64))
-        return int(np.mean(self._frames, axis=0).argmin())
-
-    def reset(self) -> None:
-        self._frames.clear()
 
 
 @dataclass(frozen=True)

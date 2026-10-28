@@ -34,7 +34,7 @@ from app.recognisers.base import Identification
 from app.recognisers.card_matcher import CardMatcher
 from app.recognisers.figurine_knn import FigurineClassifier
 from app.recognisers.verify import CardVerifier
-from app.recognisers.voting import BurstGate, DistanceAverager, FrameScore, VoteBuffer
+from app.recognisers.voting import BurstGate, FrameScore, VoteBuffer
 from app.tts import speak
 
 
@@ -54,7 +54,6 @@ def run(camera: int, mode: str, mute: bool) -> int:
 
     verifier = CardVerifier(names={e["id"]: e["name"] for e in recognisers["card"].db})
     votes = VoteBuffer()
-    avg = DistanceAverager()
     burst = BurstGate()
     locked: Identification | None = None
     empty_streak = 0
@@ -107,13 +106,11 @@ def run(camera: int, mode: str, mute: bool) -> int:
                 empty_streak += 1
                 if empty_streak >= UNLOCK_AFTER_EMPTY_FRAMES:
                     votes.reset()
-                    avg.reset()
                     locked = None
             else:
                 empty_streak = 0
                 if locked is None:
-                    db = recognisers["card"].db
-                    winner = votes.add(db[avg.add(ident.explanation["distances"])]["id"])
+                    winner = votes.add(ident.explanation.get("best_card"))
                     if winner:
                         locked = lock_from(ident, recognisers["card"], verifier, winner)
                         if locked is None:
@@ -137,7 +134,6 @@ def run(camera: int, mode: str, mute: bool) -> int:
         elif key == ord("m"):
             mode = "figurine" if mode == "card" else "card"
             votes.reset()
-            avg.reset()
             burst.reset()
             locked = None
             hard_streak = 0
