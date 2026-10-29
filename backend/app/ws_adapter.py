@@ -12,6 +12,7 @@ from typing import Any
 import numpy as np
 
 from app.recognisers.base import Identification
+from app.recognisers.card_matcher import guide_quad
 
 
 def normalise_quad(quad_px, width: int, height: int) -> list[list[float]] | None:
@@ -62,4 +63,7 @@ def build_detection_message(
         "dexId": sticky.dex_id,
         "top5": sticky.explanation.get("top5"),
         "quad": normalise_quad(live.explanation.get("quad"), width, height),
+        # where the card must be held: the region card mode reads (card_matcher.guide_quad)
+        "guide": (normalise_quad(guide_quad((height, width)), width, height)
+                  if mode == "card" else None),
     }

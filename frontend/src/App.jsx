@@ -383,19 +383,28 @@ function useDetection(url) {
 }
 
 /*
-* QuadOverlay takes in a normalised quad, image width and height, and returns an svg ready to be overlaid
+* QuadOverlay takes in the normalised detection quad and guide box, image width and height, and
+* returns an svg ready to be overlaid. The guide is where card mode reads the card from, so it
+* shares this svg (and its letterboxing) with the quad to sit on exactly the same pixels.
 * */
-function QuadOverlay({quad, width, height}) {
-  if (!quad || !width) return null;
-  const points = quad.map(([x, y]) => `${x * width},${y * height}`).join(' ');
+function QuadOverlay({quad, guide, width, height}) {
+  if ((!quad && !guide) || !width) return null;
+  const toPoints = (q) => q.map(([x, y]) => `${x * width},${y * height}`).join(' ');
   return (<svg viewBox={`0 0 ${width} ${height}`}
                preserveAspectRatio="xMidYMid meet"
                className="absolute inset-0 w-full h-full pointer-events-none">
-    <polygon points={points}
-             fill="none"
-             stroke="#15A3C7"
-             strokeWidth="3"
-             vectorEffect="non-scaling-stroke"/>
+    {guide && <>
+      {/* dark under-stroke keeps the dashed guide visible on light and dark backgrounds */}
+      <polygon points={toPoints(guide)} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth="5"
+               vectorEffect="non-scaling-stroke"/>
+      <polygon points={toPoints(guide)} fill="none" stroke="#FFFFFF" strokeWidth="2"
+               strokeDasharray="10 6" vectorEffect="non-scaling-stroke"/>
+    </>}
+    {quad && <polygon points={toPoints(quad)}
+                      fill="none"
+                      stroke="#15A3C7"
+                      strokeWidth="3"
+                      vectorEffect="non-scaling-stroke"/>}
   </svg>);
 }
 
@@ -419,8 +428,11 @@ function CameraCanvas({detection, ref}) {
       onLoad={handleImageLoad}
       className="w-full h-full object-contain"
     />
-    {/*SVG quad to overlay, dimensions are only grabbed on first load, so if change mid-stream: issue*/}
-    <QuadOverlay quad={detection?.quad} width={dimensions.width} height={dimensions.height}/>
+    {/*SVG quad + guide overlay. frameSize comes with each detection, so a resolution change
+       mid-stream stays aligned; the image's own size from first load is the fallback*/}
+    <QuadOverlay quad={detection?.quad} guide={detection?.guide}
+                 width={detection?.frameSize?.[0] ?? dimensions.width}
+                 height={detection?.frameSize?.[1] ?? dimensions.height}/>
   </div>);
 }
 

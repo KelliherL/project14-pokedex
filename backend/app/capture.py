@@ -144,7 +144,7 @@ class CaptureWorker:
         if not self.cap.isOpened():
             raise RuntimeError(f"cannot open camera {camera} (try --camera 1)")
 
-        self.recognisers = {"card": CardMatcher(), "figurine": build_figurine_recogniser()}
+        self.recognisers = {"card": CardMatcher(guided=True), "figurine": build_figurine_recogniser()}
         if not self.recognisers["card"].db:
             print("note: card DB missing — run scripts/build_card_db.py for real matching")
         self.dex = Dex()

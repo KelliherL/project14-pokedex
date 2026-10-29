@@ -36,6 +36,7 @@
 - The quad always describes the **current frame**, including while locked. The lock state is a separate field; it must not freeze the quad.
   - This means the backend has complete control over when, how, and what quad data it wants to send and when. This different to the image that is being sent, detection will be built in to detect when no frames have been sent regardless of quad data.
 - Each detection carries `frame` (matching a frame counter on the stream, for later sync) and `frameSize` (`[width, height]`, for checking the frontend's `naturalWidth`/`naturalHeight`).
+- `guide` is the card-shaped box, in the same normalised form as `quad`, that card mode reads the card from (`card_matcher.guide_quad`). It is drawn dashed so visitors know where to hold the card. It is `null` in figurine mode. Verified 2026-10-29 in headless Chrome to sit within 2 px of the backend's box, for 3 window shapes x 640x480, 1920x1080 and 1080x1920 streams.
 - `<img object-position>` and the SVG's `preserveAspectRatio` alignment must always match (default: centred / `xMidYMid`).
 - Example of expected json can be seen below (the color field should not be implemented and is only there for testing purposes)
 
@@ -71,7 +72,7 @@
 - The stream resolution does not change mid-session.
 
 ## Known issues in `App.jsx`
-- **Stream size is read once.** `onLoad` on an MJPEG `<img>` fires on the first frame only, so a mid-stream resolution change misaligns the overlay until reload. Could be fixed by using `frameSize` from the detection.
+- **Stream size is read once.** `onLoad` on an MJPEG `<img>` fires on the first frame only, so a mid-stream resolution change misaligned the overlay until reload. Fixed: the overlay now uses `frameSize` from each detection, falling back to the loaded size.
 - **No clipping to the image.** A quad outside 0–1 draws over the letterbox bars. The real backend's fallback search can produce such quads (see below), so add a `<clipPath>` of `0 0 width height` to the polygon as a guard, even though the backend is required to clamp.
 - **Tainted canvas.** The `<img>` has no `crossOrigin`, so drawing it onto the overlay canvas taints it. `getImageData`, `toDataURL` and WebGL use would then throw. Set `crossOrigin="anonymous"` (the CORS headers already exist).
 - **Unclosed stream.** The stream is not closed on unmount (set `src` to `''`), so StrictMode can leave an extra connection open.

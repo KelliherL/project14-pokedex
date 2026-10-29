@@ -16,6 +16,7 @@ import numpy as np
 from PIL import Image
 
 from .base import Identification
+from .scoring import rank
 
 # Canonical rectified size — matches the TCGdex "low" reference images the
 # DB hashes were computed from.
@@ -53,6 +54,28 @@ ASPECT_MIN, ASPECT_MAX = 0.55, 0.90
 # correct detections occupy 0.25-0.34 of the frame and failures cluster at
 # 0.85-0.90, so the bound sits in a wide empty gap.
 MAX_AREA_FRAC = 0.60
+
+# Guide box: the card-shaped outline the frontend draws in the middle of the
+# view. The kiosk straightens what is inside it instead of looking for a card
+# outline. Outline detection fails on real kiosk frames: a hand covers the
+# card's edges and a silver border vanishes against a light wall, so on a
+# recorded clip it found the card in 2% of frames, while a hand-placed crop
+# of the same frames matched first out of 107 cards every time. Measured
+# 2026-10-29 by offsetting the box from the card on those frames: cropping the
+# box alone is right 100% / 81% / 31% of the time at 0 / 5 / 10% misalignment.
+# The search below tries 27 crops around it; with 6% steps it was right 100%
+# of the time up to 8% off and 94% at 8-12% (10% steps: 76% at 4-8%, since a
+# card between two steps fits neither). About 70 ms per frame. GUIDE_HEIGHT is
+# a fraction of the frame height, which also fixes how far away the card is held.
+GUIDE_HEIGHT = 0.93
+GUIDE_SCALES = (0.93, 1.0, 1.07)
+GUIDE_SHIFTS = (-0.06, 0.0, 0.06)   # fractions of the box's width / height
+# Is a known card in the box at all? Distance alone overlaps (real crops 22-39,
+# empty box or unknown card 32+), so also require a lead over the best card of
+# a DIFFERENT name. On 60 real crops and 263 empty/unknown frames this keeps
+# 98% of real frames and passes none of the empty/unknown ones.
+GUIDE_MAX_DISTANCE = 36
+GUIDE_MIN_LEAD = 10
 
 
 def hash_entry(img: Image.Image) -> dict:
@@ -156,6 +179,28 @@ def rectify(frame: np.ndarray, quad: np.ndarray) -> np.ndarray:
     return cv2.warpPerspective(frame, m, (CARD_W, CARD_H))
 
 
+def guide_quad(frame_shape) -> np.ndarray:
+    """The guide box in frame pixels, [TL, TR, BR, BL]: a card-shaped outline,
+    centred, GUIDE_HEIGHT of the frame tall where it fits. ws_adapter sends the same box to
+    the frontend, which draws it."""
+    h, w = frame_shape[:2]
+    # GUIDE_HEIGHT of the height, or of the width on a frame too narrow for that (portrait)
+    ch = GUIDE_HEIGHT * min(h, w * CARD_H / CARD_W)
+    cw = ch * CARD_W / CARD_H
+    x0, y0 = (w - cw) / 2, (h - ch) / 2
+    return np.array([[x0, y0], [x0 + cw, y0], [x0 + cw, y0 + ch], [x0, y0 + ch]],
+                    dtype=np.float32)
+
+
+def guide_candidates(frame_shape) -> list[np.ndarray]:
+    """The guide box and small scale/shift variants of it, so a card held a
+    little off the outline is still cropped cleanly by one of them."""
+    box = guide_quad(frame_shape)
+    centre, across, down = box.mean(axis=0), box[1] - box[0], box[3] - box[0]
+    return [(centre + (box - centre) * s + dx * across + dy * down).astype(np.float32)
+            for s in GUIDE_SCALES for dx in GUIDE_SHIFTS for dy in GUIDE_SHIFTS]
+
+
 def rectify_candidates(frame: np.ndarray, quad: np.ndarray) -> list[np.ndarray]:
     """Aspect-aware rectify: portrait quads warp straight to the canonical
     view; landscape quads (card at ~90°) warp to a landscape canvas first,
@@ -179,7 +224,10 @@ def rectify_candidates(frame: np.ndarray, quad: np.ndarray) -> list[np.ndarray]:
 
 
 class CardMatcher:
-    def __init__(self, db_path: Path = DB_PATH):
+    def __init__(self, db_path: Path = DB_PATH, guided: bool = False):
+        """`guided` reads the card from the guide box (the kiosk) instead of
+        searching the frame for a card outline (tests, photos, add-a-card)."""
+        self.guided = guided
         self.db: list[dict] = []
         if Path(db_path).exists():
             raw = json.loads(Path(db_path).read_text(encoding="utf-8"))
@@ -229,6 +277,9 @@ class CardMatcher:
         per frame; the caller turns it on once the cheap path has come back
         with nothing. See card_fallback for the measurements.
         """
+        if self.guided and self.db:
+            return self._identify_in_guide(frame)
+
         quad = detect_card_quad(frame)
 
         if quad is None:
@@ -261,6 +312,28 @@ class CardMatcher:
                 return searched
 
         return self._result(quad, warped, dists)
+
+    def _identify_in_guide(self, frame: np.ndarray) -> Identification:
+        """Crop each guide candidate, keep the one that matches the DB best."""
+        best = None
+        for quad in guide_candidates(frame.shape):
+            crop = rectify(frame, quad)
+            d = self._distances(Image.fromarray(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)))
+            if best is None or d.min() < best[2].min():
+                best = (quad, crop, d)
+        quad, crop, dists = best
+        # An empty box still has a nearest card; this keeps it from voting, and
+        # lets the lock release once the card is taken away.
+        ranked = rank({i: -float(d) for i, d in enumerate(dists)},
+                      group_of=lambda i: self.db[i]["name"])
+        lead = ranked.best_score - ranked.runner_up_score
+        if dists.min() > GUIDE_MAX_DISTANCE or lead < GUIDE_MIN_LEAD:
+            return Identification(kind="none", explanation={
+                "reason": "no known card in the guide box",
+                "best_distance": int(dists.min()), "lead": int(lead)})
+        ident = self._result(quad, crop, dists)
+        ident.explanation["found_by"] = "guide box"
+        return ident
 
     def _result(self, quad: np.ndarray, warped: np.ndarray,
                 dists: np.ndarray) -> Identification:

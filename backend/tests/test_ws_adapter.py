@@ -9,6 +9,7 @@ freezing with the lock.
 """
 
 from app.recognisers.base import Identification
+from app.recognisers.card_matcher import CARD_H, CARD_W
 from app.ws_adapter import build_detection_message, normalise_quad
 
 W, H = 640, 480
@@ -77,7 +78,18 @@ def test_message_has_exactly_the_agreed_fields():
     saturating distance/32 formula) replaces them."""
     live = _ident(kind="card", quad=[[0, 0], [10, 0], [10, 10], [0, 10]])
     msg = build_detection_message(1, W, H, "card", live, None)
-    assert set(msg) == {"type", "frame", "frameSize", "phase", "dexId", "top5", "quad"}
+    assert set(msg) == {"type", "frame", "frameSize", "phase", "dexId", "top5", "quad", "guide"}
+
+
+def test_guide_is_sent_in_card_mode_only_and_keeps_card_proportions():
+    live = _ident(kind="none")
+    for w, h in ((640, 480), (1920, 1080), (1080, 1920)):
+        guide = build_detection_message(1, w, h, "card", live, None)["guide"]
+        (x0, y0), (x1, _), (_, y2), _ = guide
+        assert abs((x0 + x1) / 2 - 0.5) < 1e-6 and abs((y0 + y2) / 2 - 0.5) < 1e-6
+        # card-shaped in PIXELS whatever the frame's aspect ratio
+        assert abs(((x1 - x0) * w) / ((y2 - y0) * h) - CARD_W / CARD_H) < 1e-4
+    assert build_detection_message(1, W, H, "figurine", live, None)["guide"] is None
 
 
 def test_no_top5_available_reports_null_not_a_missing_key():

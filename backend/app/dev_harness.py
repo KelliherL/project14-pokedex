@@ -14,6 +14,7 @@ import os
 import sys
 
 import cv2
+import numpy as np
 
 from app import overlay
 from app.capture import (
@@ -31,7 +32,7 @@ from app.capture import (
 )
 from app.dex import Dex
 from app.recognisers.base import Identification
-from app.recognisers.card_matcher import CardMatcher
+from app.recognisers.card_matcher import CardMatcher, guide_quad
 from app.recognisers.figurine_knn import FigurineClassifier
 from app.recognisers.verify import CardVerifier
 from app.recognisers.voting import BurstGate, FrameScore, VoteBuffer
@@ -39,7 +40,7 @@ from app.tts import speak
 
 
 def run(camera: int, mode: str, mute: bool) -> int:
-    recognisers = {"card": CardMatcher(), "figurine": build_figurine_recogniser()}
+    recognisers = {"card": CardMatcher(guided=True), "figurine": build_figurine_recogniser()}
     if not recognisers["card"].db:
         print("note: card DB missing — run scripts/build_card_db.py for real matching")
     dex = Dex()
@@ -117,6 +118,8 @@ def run(camera: int, mode: str, mute: bool) -> int:
                             votes.reset()  # verify abstained; keep watching
 
         shown = locked if locked is not None else ident
+        if mode == "card":
+            cv2.polylines(frame, [guide_quad(frame.shape).astype(np.int32)], True, (255, 255, 255), 1)
         frame = overlay.draw(frame, shown, mode)
         cv2.imshow("Pokedex dev harness — COMPX374 P14", frame)
 
