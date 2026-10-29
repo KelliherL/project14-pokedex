@@ -23,6 +23,7 @@ if errorlevel 2 goto :declined
 powershell -NoProfile -Command "Start-Process wsl -ArgumentList '--install','--no-distribution' -Verb RunAs -Wait"
 if errorlevel 1 (
     echo [install] WSL install failed or was cancelled.
+    echo [install] If this PC can't run virtualisation, use run\install_windows_native.bat instead.
     goto :fail
 )
 set NEED_RESTART=1
@@ -79,23 +80,7 @@ if not exist .env (
 )
 
 :: ---------------------------------------------------------------- Backend venv
-if not exist "backend\.venv\Scripts\python.exe" (
-    echo [install] Creating the backend's Python environment...
-    %PY% -m venv backend\.venv || goto :fail
-)
-echo [install] Installing backend packages (the first time downloads ~1 GB)...
-backend\.venv\Scripts\python -m pip install --upgrade pip >nul
-backend\.venv\Scripts\python -m pip install -r backend\requirements.txt
-if errorlevel 1 (
-    echo [install] Installing the backend packages failed.
-    goto :fail
-)
-echo [install] Downloading figurine model weights...
-backend\.venv\Scripts\python -c "import torch; torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14_reg', verbose=False); print('DINOv2 weights cached')"
-if errorlevel 1 (
-    echo [install] Downloading the figurine model weights failed.
-    goto :fail
-)
+call "%~dp0setup_backend_venv.bat" || goto :fail
 
 :: ---------------------------------------------------------------- Docker side
 call "%~dp0ensure_docker.bat" || goto :fail

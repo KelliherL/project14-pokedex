@@ -32,13 +32,18 @@ from app.server import create_app
 def main() -> int:
     ap = argparse.ArgumentParser(description="Pokédex kiosk")
     ap.add_argument("--camera", type=int, default=0, help="webcam index")
-    ap.add_argument("--mode", choices=["card", "figurine"], default="card")
+    ap.add_argument("--mode", choices=["card", "figurine", "add-card"], default="card",
+                    help="add-card = photograph a card into the card DB (app/add_card.py)")
     ap.add_argument("--mute", action="store_true", help="print instead of speaking")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--dev-window", action="store_true",
                      help="run the cv2.imshow visual harness instead of the server")
     args = ap.parse_args()
+
+    if args.mode == "add-card":
+        from app.add_card import run as add_card
+        return add_card(args.camera)
 
     if args.dev_window:
         from app.dev_harness import run

@@ -55,11 +55,12 @@ echo   1) Server - card mode       (default; what the frontend talks to)
 echo   2) Server - figurine mode
 echo   3) Dev window - card mode       (cv2 debug window, no server)
 echo   4) Dev window - figurine mode
-:: Q goes first so the mode keys keep the same errorlevels with or without 5.
+echo   5) Add a card to the database   (photo + details; needs the database running)
+:: Q goes first so the mode keys keep the same errorlevels with or without 6.
 :: Single-line ifs, not a ( ) block: a ")" in a camera name would end the block.
-set MENU_KEYS=Q1234
-if defined LAST_MODE_ARGS echo   5^) Same as last: %LAST_LABEL%, camera %LAST_CAMERA%:%LAST_CAMERA_NAME%
-if defined LAST_MODE_ARGS set MENU_KEYS=Q12345
+set MENU_KEYS=Q12345
+if defined LAST_MODE_ARGS echo   6^) Same as last: %LAST_LABEL%, camera %LAST_CAMERA%:%LAST_CAMERA_NAME%
+if defined LAST_MODE_ARGS set MENU_KEYS=Q123456
 echo   Q) Quit
 echo.
 choice /c %MENU_KEYS% /n /m "Select an option: "
@@ -83,6 +84,10 @@ if %PICK%==5 (
     set MODE_LABEL=Dev window - figurine mode
 )
 if %PICK%==6 (
+    set MODE_ARGS=--mode add-card
+    set MODE_LABEL=Add a card
+)
+if %PICK%==7 (
     set "MODE_ARGS=%LAST_MODE_ARGS%"
     set "MODE_LABEL=%LAST_LABEL%"
     set "CAMERA_INDEX=%LAST_CAMERA%"

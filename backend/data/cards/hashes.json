@@ -1465,6 +1465,81 @@
     "565551714dd4cef3",
     "308cd44d31755515"
    ]
+  },
+  {
+   "id": "own-pikachu-japenese-1",
+   "name": "Pikachu (Japenese)",
+   "dex_ids": [
+    25
+   ],
+   "phash": [
+    "95f579f00ad61e24",
+    "c05f2c5a4f7c4b86"
+   ],
+   "dhash": [
+    "98de6e64a69c9ef8",
+    "a0868698c98984e6"
+   ]
+  },
+  {
+   "id": "own-seel-1",
+   "name": "Seel",
+   "dex_ids": [
+    86
+   ],
+   "phash": [
+    "9a952f622b3eb10e",
+    "cf2f5ac87a94e484"
+   ],
+   "dhash": [
+    "69f0f06861996d61",
+    "61496639e1f0f069"
+   ]
+  },
+  {
+   "id": "own-wailord-1",
+   "name": "Wailord",
+   "dex_ids": [
+    321
+   ],
+   "phash": [
+    "aae594691b5ae329",
+    "ff4ec0c24eb0b683"
+   ],
+   "dhash": [
+    "bbc4cd4d6b6131bc",
+    "c26369294d4cdc22"
+   ]
+  },
+  {
+   "id": "own-electrode-1",
+   "name": "Electrode",
+   "dex_ids": [
+    101
+   ],
+   "phash": [
+    "a73f14d9c16362c6",
+    "f295417a94c9376a"
+   ],
+   "dhash": [
+    "aa6a4d49d6cf8ec6",
+    "98860c946d4da9aa"
+   ]
+  },
+  {
+   "id": "own-electrode-2",
+   "name": "Electrode",
+   "dex_ids": [
+    101
+   ],
+   "phash": [
+    "b73f1cd8c16362c4",
+    "f295493294c9376e"
+   ],
+   "dhash": [
+    "ba2a4d49d6ceccc6",
+    "9c848c946d4daba2"
+   ]
   }
  ]
 }

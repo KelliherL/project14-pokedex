@@ -37,6 +37,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from .card_matcher import OWN_DIR
 from .scoring import rank
 
 IMG_DIR = Path(__file__).resolve().parents[2] / "data" / "cards" / "images"
@@ -84,14 +85,14 @@ class CardVerifier:
         """SIFT features for the whole card and for its illustration."""
         if card_id not in self._ref_cache:
             feats = None
-            for ext in (".webp", ".png"):
-                p = self.img_dir / f"{card_id}{ext}"
-                if p.exists():
-                    img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
-                    if img is not None:
-                        feats = (self._sift.detectAndCompute(img, None),
-                                 self._sift.detectAndCompute(artwork(img), None))
-                    break
+            paths = [d / f"{card_id}{ext}" for d in (self.img_dir, OWN_DIR)
+                     for ext in (".webp", ".png")]
+            p = next((p for p in paths if p.exists()), None)
+            if p is not None:
+                img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+                if img is not None:
+                    feats = (self._sift.detectAndCompute(img, None),
+                             self._sift.detectAndCompute(artwork(img), None))
             self._ref_cache[card_id] = feats
         return self._ref_cache[card_id]
 

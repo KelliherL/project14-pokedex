@@ -5,6 +5,8 @@ __pycache__/
 .ruff_cache/
 backend/data/cards/*
 !backend/data/cards/hashes.json
+# cards photographed with the launcher's "Add a card" (~30 KB each)
+!backend/data/cards/own/
 /.idea/
 .env
 backend/scripts/net9.0/

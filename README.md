@@ -21,6 +21,7 @@
 - [Getting started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Quick start — Windows](#quick-start--windows)
+  - [Quick start — Windows without Docker](#quick-start--windows-without-docker)
   - [Quick start — Linux](#quick-start--linux)
   - [What the installers do](#what-the-installers-do)
   - [Running the backend manually](#running-the-backend-manually)
@@ -206,6 +207,29 @@ run\start_windows.bat
 On Windows the backend runs natively, outside Docker, because Docker Desktop
 can't pass a USB webcam through to a container.
 
+### Quick start — Windows without Docker
+
+Docker Desktop needs hardware virtualisation (WSL 2). If your PC can't run it,
+use these scripts instead. Nothing runs in Docker:
+
+```bat
+run\install_windows_native.bat
+run\start_windows_native.bat
+```
+
+1. **`run\install_windows_native.bat`** (once). It offers to install Python 3.12,
+   Node.js LTS, Git for Windows, the .NET 9 runtime and MongoDB Server (as a
+   Windows service on port 27017) via `winget`. Then it sets up `backend\.venv`,
+   downloads the card images and model weights, builds the frontend and seeds
+   the database. If Python or Node.js had to be installed, open a new terminal
+   and run it again.
+2. **`run\start_windows_native.bat`** (every time). It starts MongoDB if it isn't
+   running, serves the built frontend on <http://localhost:5173> in the
+   background, then opens the backend menu, the same as `run\start_windows.bat`.
+   The frontend stops when you quit the backend.
+
+MongoDB must stay on port 27017 here, because the seeder always connects there.
+
 ### Quick start — Linux
 
 ```bash
@@ -381,6 +405,9 @@ project14-pokedex/
 │   ├── start_windows.bat      # Windows: start containers, then the backend launcher
 │   ├── backend_launch.bat     # Windows: native backend menu (mode + camera)
 │   ├── ensure_docker.bat      # Windows: starts Docker Desktop if it isn't running
+│   ├── setup_backend_venv.bat # Windows: backend venv + figurine weights (both installers)
+│   ├── install_windows_native.bat # Windows without Docker: install once
+│   ├── start_windows_native.bat   # Windows without Docker: serve frontend, then the backend launcher
 │   ├── install_linux.sh       # Linux: install once
 │   └── start_linux.sh         # Linux: start all three containers
 ├── docker/                # Dockerfiles: backend, frontend (build + nginx), DB seeder

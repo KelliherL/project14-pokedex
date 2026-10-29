@@ -30,6 +30,9 @@ CARD_W, CARD_H = 245, 337
 MAX_BEST_DISTANCE = 26
 MIN_MARGIN = 8
 DB_PATH = Path(__file__).resolve().parents[2] / "data" / "cards" / "hashes.json"
+# Cards photographed with the kiosk camera (app/add_card.py): <id>.json + <id>.webp,
+# committed so every machine has the references its hashes.json points at.
+OWN_DIR = DB_PATH.parent / "own"
 
 # Card aspect is 63:88 ≈ 0.72; accept a generous band (perspective skew).
 ASPECT_MIN, ASPECT_MAX = 0.55, 0.90
@@ -50,6 +53,14 @@ ASPECT_MIN, ASPECT_MAX = 0.55, 0.90
 # correct detections occupy 0.25-0.34 of the frame and failures cluster at
 # 0.85-0.90, so the bound sits in a wide empty gap.
 MAX_AREA_FRAC = 0.60
+
+
+def hash_entry(img: Image.Image) -> dict:
+    """A reference card's hashes in both orientations, as stored in hashes.json.
+    The one recipe shared by scripts/build_card_db.py and app/add_card.py."""
+    orientations = [img, img.rotate(180)]
+    return {"phash": [str(imagehash.phash(i)) for i in orientations],
+            "dhash": [str(imagehash.dhash(i)) for i in orientations]}
 
 
 def _pack(db: list[dict]) -> tuple[np.ndarray, np.ndarray]:

@@ -2,17 +2,22 @@
 
 Run bash scripts/download_card_set.sh first — it caches card JSON into
 data/cards/meta/ and images into data/cards/images/. This script hashes
-them into data/cards/hashes.json (normal + 180° orientations).
+them into data/cards/hashes.json (normal + 180° orientations), along with
+the cards photographed into data/cards/own/ by the launcher's "Add a card".
 
 (Downloading lives in the shell script because parallel curl with retries
 survived a flaky link that a sequential urllib downloader did not.)
 """
 
 import json
+import sys
 from pathlib import Path
 
-import imagehash
 from PIL import Image
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.recognisers.card_matcher import OWN_DIR, hash_entry
 
 ROOT = Path(__file__).resolve().parents[1]
 META_DIR = ROOT / "data" / "cards" / "meta"
@@ -30,13 +35,14 @@ def main() -> None:
         set_id = json.loads(set_json.read_text(encoding="utf-8")).get("id", "unknown")
 
     cards_out, missing = [], 0
-    for meta_path in sorted(META_DIR.glob("*.json")):
+    for meta_path in sorted(META_DIR.glob("*.json")) + sorted(OWN_DIR.glob("*.json")):
         detail = json.loads(meta_path.read_text(encoding="utf-8"))
         cid = detail["id"]
         img_path = next(
             (
                 p
-                for p in (IMG_DIR / f"{cid}.webp", IMG_DIR / f"{cid}.png")
+                for p in (IMG_DIR / f"{cid}.webp", IMG_DIR / f"{cid}.png",
+                          OWN_DIR / f"{cid}.webp")
                 if p.exists() and p.stat().st_size > 0
             ),
             None,
@@ -51,14 +57,12 @@ def main() -> None:
             print(f"  {cid}: unreadable image ({e}) — re-run the download script")
             missing += 1
             continue
-        orientations = [img, img.rotate(180)]
         cards_out.append(
             {
                 "id": cid,
                 "name": detail["name"],
                 "dex_ids": detail.get("dexId") or [],
-                "phash": [str(imagehash.phash(i)) for i in orientations],
-                "dhash": [str(imagehash.dhash(i)) for i in orientations],
+                **hash_entry(img),
             }
         )
 
